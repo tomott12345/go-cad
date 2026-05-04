@@ -197,7 +197,9 @@ func TestSolveEntities_InvalidIndices(t *testing.T) {
                 {Kind: constraints.Horizontal, Indices: []int{99}},
         }
         updated, _ := constraints.SolveEntitiesDefault(entities, cs)
-        _ = updated
+        if len(updated) == 0 {
+                t.Error("SolveEntitiesDefault out-of-bounds index: expected entities returned unchanged")
+        }
 }
 
 func TestSolveEntities_Midpoint(t *testing.T) {
@@ -348,7 +350,10 @@ func TestSolveEntities_EqualRadius_NilRadius(t *testing.T) {
         }}
         entities := []geometry.Entity{seg, circle}
         cs := []constraints.EntityConstraint{{Kind: constraints.EqualRadius, Indices: []int{0, 1}}}
-        _, _ = constraints.SolveEntitiesDefault(entities, cs)
+        result, _ := constraints.SolveEntitiesDefault(entities, cs)
+        if len(result) == 0 {
+                t.Error("EqualRadius mixed types: expected entities returned")
+        }
 }
 
 func TestSolveEntities_Tangent_NoRadius(t *testing.T) {
@@ -360,7 +365,10 @@ func TestSolveEntities_Tangent_NoRadius(t *testing.T) {
         }}
         entities := []geometry.Entity{seg1, seg2}
         cs := []constraints.EntityConstraint{{Kind: constraints.Tangent, Indices: []int{0, 1}}}
-        _, _ = constraints.SolveEntitiesDefault(entities, cs)
+        result, _ := constraints.SolveEntitiesDefault(entities, cs)
+        if len(result) == 0 {
+                t.Error("Tangent no-radius: expected entities returned")
+        }
 }
 
 func TestSolveEntities_Symmetric(t *testing.T) {

@@ -260,11 +260,12 @@ func MarshalEntity(e Entity) ([]byte, error) {
         default:
                 return nil, fmt.Errorf("unknown entity type: %T", e)
         }
-        raw, err := json.Marshal(data)
-        if err != nil {
-                return nil, err
-        }
-        return json.Marshal(RawEntity{EntityKind: e.Kind(), Data: raw})
+        // Single marshal call: embed the typed value directly so the intermediate
+        // error check (unreachable for well-typed structs) is not needed.
+        return json.Marshal(struct {
+                Kind string      `json:"kind"`
+                Data interface{} `json:"data"`
+        }{Kind: string(e.Kind()), Data: data})
 }
 
 // UnmarshalEntity deserialises a RawEntity JSON envelope to an Entity.

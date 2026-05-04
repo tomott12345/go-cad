@@ -58,9 +58,11 @@ func TestArcNormAngle(t *testing.T) {
 
 func TestArcClosestPoint_EndPoints(t *testing.T) {
         a := Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 90}
-        // Point behind start — should snap to start point (1,0)*5
+        // Point behind start — should snap to start point (5,0)
         p := a.ClosestPoint(Point{-1, -1})
-        _ = p // just ensure no panic; start or end is returned
+        if math.Abs(p.Dist(a.StartPoint())) > 0.5 {
+                t.Errorf("arc closest behind start: %v want near %v", p, a.StartPoint())
+        }
 }
 
 // ─── BBox helpers ─────────────────────────────────────────────────────────────
@@ -183,9 +185,12 @@ func TestEllipseDistToPoint(t *testing.T) {
 
 func TestLineEntity_BoundingBox(t *testing.T) {
         l := LineEntity{Line{P: Point{0, 0}, Q: Point{5, 5}}}
+        // An infinite line has no finite bounding box; the implementation returns
+        // the empty sentinel {Min:+Inf, Max:-Inf}.
         bb := l.BoundingBox()
-        // Line is infinite — BoundingBox returns empty
-        _ = bb
+        if bb.Min.X <= bb.Max.X {
+                t.Errorf("infinite line BBox should be empty sentinel, got %+v", bb)
+        }
 }
 
 func TestRayEntity_BoundingBox(t *testing.T) {
@@ -298,15 +303,13 @@ func TestIntersect_EllipseEllipse(t *testing.T) {
 func TestIntersect_ArcEllipse(t *testing.T) {
         a := ArcEntity{Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 180}}
         e := EllipseEntity{Ellipse{Center: Point{0, 0}, A: 5, B: 5, Rotation: 0}}
-        pts := Intersect(a, e)
-        _ = pts // may or may not intersect; just ensure no panic
+        assertNoNaN(t, Intersect(a, e), "arc×ellipse")
 }
 
 func TestIntersect_NURBSSegment(t *testing.T) {
         sp := NURBSEntity{NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 0}, {5, 5}, {10, 0}}, nil)}
         s := SegmentEntity{Segment{Start: Point{3, -2}, End: Point{3, 8}}}
-        pts := Intersect(sp, s)
-        _ = pts
+        assertNoNaN(t, Intersect(sp, s), "nurbs×segment")
 }
 
 func TestIntersect_EllipsePolyline(t *testing.T) {
@@ -423,22 +426,19 @@ func TestIntersect_PolylineEllipse(t *testing.T) {
 func TestIntersect_NURBSPolyline(t *testing.T) {
         sp := NURBSEntity{NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{-5, 0}, {0, 5}, {5, 0}}, nil)}
         p := PolylineEntity{Polyline{Points: []Point{{-10, 2}, {10, 2}}}}
-        pts := Intersect(sp, p)
-        _ = pts
+        assertNoNaN(t, Intersect(sp, p), "nurbs×polyline")
 }
 
 func TestIntersect_SegmentNURBS(t *testing.T) {
         sp := NURBSEntity{NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 0}, {5, 5}, {10, 0}}, nil)}
         s := SegmentEntity{Segment{Start: Point{0, 0}, End: Point{10, 5}}}
-        pts := Intersect(s, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(s, sp), "segment×nurbs")
 }
 
 func TestIntersect_LineNURBS(t *testing.T) {
         sp := NURBSEntity{NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 0}, {5, 5}, {10, 0}}, nil)}
         l := LineEntity{Line{P: Point{-10, 2}, Q: Point{20, 2}}}
-        pts := Intersect(l, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(l, sp), "line×nurbs")
 }
 
 func TestIntersect_LineBezier(t *testing.T) {
@@ -471,15 +471,13 @@ func TestIntersect_RayPolyline(t *testing.T) {
 func TestIntersect_RayBezier(t *testing.T) {
         r := RayEntity{Ray{Origin: Point{-5, 0}, Dir: Point{1, 0}}}
         b := BezierEntity{NewBezierSpline([]Point{{0, -3}, {3, 3}, {7, -3}, {10, 3}})}
-        pts := Intersect(r, b)
-        _ = pts
+        assertNoNaN(t, Intersect(r, b), "ray×bezier")
 }
 
 func TestIntersect_RayNURBS(t *testing.T) {
         r := RayEntity{Ray{Origin: Point{-5, 2}, Dir: Point{1, 0}}}
         sp := NURBSEntity{NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 0}, {5, 5}, {10, 0}}, nil)}
-        pts := Intersect(r, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(r, sp), "ray×nurbs")
 }
 
 func TestIntersect_RayArc(t *testing.T) {
@@ -494,15 +492,13 @@ func TestIntersect_RayArc(t *testing.T) {
 func TestIntersect_EllipseBezier(t *testing.T) {
         e := EllipseEntity{Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}}
         b := BezierEntity{NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})}
-        pts := Intersect(e, b)
-        _ = pts
+        assertNoNaN(t, Intersect(e, b), "ellipse×bezier")
 }
 
 func TestIntersect_EllipseNURBS(t *testing.T) {
         e := EllipseEntity{Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}}
         sp := NURBSEntity{NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 0}, {5, 5}, {10, 0}}, nil)}
-        pts := Intersect(e, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(e, sp), "ellipse×nurbs")
 }
 
 // ─── Collinear segment edge cases ────────────────────────────────────────────
@@ -629,15 +625,13 @@ func TestRay_IntersectWithLine_Parallel(t *testing.T) {
 func TestIntersectNURBSNURBS(t *testing.T) {
         a := NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 0}, {5, 5}, {10, 0}}, nil)
         b := NewNURBSSpline(2, []float64{0, 0, 0, 1, 1, 1}, []Point{{0, 4}, {5, -1}, {10, 4}}, nil)
-        pts := IntersectNURBSNURBS(a, b)
-        _ = pts
+        assertNoNaN(t, IntersectNURBSNURBS(a, b), "nurbs×nurbs")
 }
 
 func TestIntersectBezierBezier_Standalone(t *testing.T) {
         a := NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})
         b := NewBezierSpline([]Point{{0, 3}, {3, -2}, {7, -2}, {10, 3}})
-        pts := IntersectBezierBezier(a, b)
-        _ = pts // may intersect
+        assertNoNaN(t, IntersectBezierBezier(a, b), "bezier×bezier")
 }
 
 // ─── IntersectArcPolyline / IntersectCirclePolyline ───────────────────────────

@@ -67,8 +67,7 @@ func TestIntersectSegmentWith_Polyline(t *testing.T) {
 func TestIntersectSegmentWith_Bezier(t *testing.T) {
         s := Segment{Start: Point{5, -5}, End: Point{5, 5}}
         b := BezierEntity{NewBezierSpline([]Point{{0, 0}, {3, 3}, {7, 3}, {10, 0}})}
-        pts := intersectSegmentWith(s, b)
-        _ = pts
+        assertNoNaN(t, intersectSegmentWith(s, b), "seg×bezier")
 }
 
 func TestIntersectSegmentWith_NURBS(t *testing.T) {
@@ -78,8 +77,7 @@ func TestIntersectSegmentWith_NURBS(t *testing.T) {
                 []Point{{0, 0}, {5, 5}, {10, 0}},
                 nil,
         )}
-        pts := intersectSegmentWith(s, sp)
-        _ = pts
+        assertNoNaN(t, intersectSegmentWith(s, sp), "seg×nurbs")
 }
 
 func TestIntersectSegmentWith_Unknown(t *testing.T) {
@@ -90,11 +88,9 @@ func TestIntersectSegmentWith_Unknown(t *testing.T) {
         }
 }
 
-// intersectPolylineWith: Line and Ray arms are also unreachable via public API
-// because "line" and "ray" are lexicographically greater than "polyline"... wait,
-// actually "line" > "polyline"? No: "l" < "p" so "line" < "polyline".
-// So Intersect(polyline, line) → intersectOrdered(line, polyline) → intersectLineWith.
-// These arms in intersectPolylineWith are unreachable via public API.
+// intersectPolylineWith: Line and Ray arms are unreachable via public API because
+// "line" and "ray" are lexicographically smaller than "polyline", so
+// intersectOrdered dispatches to intersectLineWith / intersectRayWith first.
 
 func TestIntersectPolylineWith_Line(t *testing.T) {
         p := Polyline{Points: []Point{{0, 0}, {10, 0}}}
@@ -129,22 +125,19 @@ func TestIntersectEllipseWith_Segment(t *testing.T) {
 func TestIntersectEllipseWith_Circle(t *testing.T) {
         e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
         c := CircleEntity{Circle{Center: Point{4, 0}, Radius: 3}}
-        pts := intersectEllipseWith(e, c)
-        _ = pts
+        assertNoNaN(t, intersectEllipseWith(e, c), "ellipse×circle")
 }
 
 func TestIntersectEllipseWith_Arc(t *testing.T) {
         e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
         a := ArcEntity{Arc{Center: Point{4, 0}, Radius: 3, StartDeg: 0, EndDeg: 180}}
-        pts := intersectEllipseWith(e, a)
-        _ = pts
+        assertNoNaN(t, intersectEllipseWith(e, a), "ellipse×arc")
 }
 
 func TestIntersectEllipseWith_Bezier(t *testing.T) {
         e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
         b := BezierEntity{NewBezierSpline([]Point{{-6, 0}, {-2, 5}, {2, 5}, {6, 0}})}
-        pts := intersectEllipseWith(e, b)
-        _ = pts
+        assertNoNaN(t, intersectEllipseWith(e, b), "ellipse×bezier")
 }
 
 func TestIntersectEllipseWith_Polyline(t *testing.T) {
@@ -163,8 +156,7 @@ func TestIntersectEllipseWith_NURBS(t *testing.T) {
                 []Point{{-6, 0}, {0, 5}, {6, 0}},
                 nil,
         )}
-        pts := intersectEllipseWith(e, sp)
-        _ = pts
+        assertNoNaN(t, intersectEllipseWith(e, sp), "ellipse×nurbs")
 }
 
 func TestIntersectEllipseWith_Unknown(t *testing.T) {
@@ -245,8 +237,7 @@ func TestIntersectLineWith_Ray(t *testing.T) {
 func TestIntersectLineWith_Bezier(t *testing.T) {
         l := Line{P: Point{-10, 2}, Q: Point{10, 2}}
         b := BezierEntity{NewBezierSpline([]Point{{-5, 0}, {-2, 5}, {2, 5}, {5, 0}})}
-        pts := intersectLineWith(l, b)
-        _ = pts
+        assertNoNaN(t, intersectLineWith(l, b), "line×bezier")
 }
 
 func TestIntersectLineWith_NURBS(t *testing.T) {
@@ -256,8 +247,7 @@ func TestIntersectLineWith_NURBS(t *testing.T) {
                 []Point{{0, 0}, {5, 5}, {10, 0}},
                 nil,
         )}
-        pts := intersectLineWith(l, sp)
-        _ = pts
+        assertNoNaN(t, intersectLineWith(l, sp), "line×nurbs")
 }
 
 // intersectRayWith: Bezier arm is unreachable via public API ("bezier" < "ray").
@@ -265,8 +255,7 @@ func TestIntersectLineWith_NURBS(t *testing.T) {
 func TestIntersectRayWith_Bezier(t *testing.T) {
         r := Ray{Origin: Point{-10, 2}, Dir: Point{1, 0}}
         b := BezierEntity{NewBezierSpline([]Point{{-5, 0}, {-2, 5}, {2, 5}, {5, 0}})}
-        pts := intersectRayWith(r, b)
-        _ = pts
+        assertNoNaN(t, intersectRayWith(r, b), "ray×bezier")
 }
 
 // intersectPolylineWith: nil default arm.
@@ -375,8 +364,8 @@ func TestPolyline_Offset_SinglePoint(t *testing.T) {
 func TestPolyline_TrimAt_ZeroLength(t *testing.T) {
         p := Polyline{Points: []Point{{5, 5}, {5, 5}}}
         a, b := p.TrimAt(0.5)
-        _ = a
-        _ = b
+        assertNoNaN(t, a.Points, "trim-zero-a")
+        assertNoNaN(t, b.Points, "trim-zero-b")
 }
 
 func TestFilterBySegment_MixedInsideOutside(t *testing.T) {
@@ -425,32 +414,11 @@ func TestBezierSpline_PointAt_AtOne(t *testing.T) {
 }
 
 func TestBezierSpline_PointAt_SegBoundaryClamped(t *testing.T) {
-        // 7 control points = 2 segments; t=0.5 is at the exact boundary.
+        // 7 control points = 2 segments; t=0.5 lands exactly on the segment boundary.
         sp := NewBezierSpline([]Point{
                 {0, 0}, {2, 4}, {4, 4}, {6, 0}, {8, -4}, {10, -4}, {12, 0},
         })
-        p := sp.PointAt(0.5)
-        if math.IsNaN(p.X) || math.IsNaN(p.Y) {
-                t.Errorf("PointAt boundary: NaN %v", p)
-        }
-}
-
-// Hit the seg >= ns clamp branch: pass t that rounds up to seg == ns.
-func TestBezierSpline_PointAt_SegOverflow(t *testing.T) {
-        sp := NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})
-        // t = 0.9999... → seg = int(0.9999*1) = 0, fine. t slightly > 1/ns boundary.
-        // With 1 segment, any t in [0,1) picks seg=0. t=1.0 is handled by t>=1 branch.
-        // To hit seg>=ns: need ns>1 and t such that int(t*ns) == ns.
-        // 2 segments: t=1.0 is already handled. t=0.999 → seg=1 which equals ns=2? No.
-        // Actually the clamp is: if seg >= ns { seg = ns-1 }. With ns=1: seg=int(t*1).
-        // t=0.9 → seg=0, fine. This branch is hit when t*ns computes to exactly ns.
-        // For ns=1, t must be in [1, 2) — but that's caught by t>=1.
-        // This branch is effectively unreachable for well-formed inputs.
-        // Call with t=0.9999 to exercise the normal path without NaN.
-        p := sp.PointAt(0.9999)
-        if math.IsNaN(p.X) || math.IsNaN(p.Y) {
-                t.Errorf("PointAt(0.9999): NaN %v", p)
-        }
+        assertPointValid(t, sp.PointAt(0.5), "bezier-boundary")
 }
 
 func TestNURBSSpline_PointAt_BelowLo(t *testing.T) {
@@ -459,8 +427,7 @@ func TestNURBSSpline_PointAt_BelowLo(t *testing.T) {
                 []Point{{0, 0}, {5, 5}, {10, 0}},
                 nil,
         )
-        p := sp.PointAt(-1)
-        _ = p
+        assertPointValid(t, sp.PointAt(-1), "nurbs-below-lo")
 }
 
 func TestNURBSSpline_PointAt_ZeroWeight(t *testing.T) {
@@ -541,7 +508,7 @@ func TestPolyline_TrimAt_BeyondEnd(t *testing.T) {
         if len(first.Points) < 2 {
                 t.Error("TrimAt>1: first part too short")
         }
-        _ = second
+        assertNoNaN(t, second.Points, "trim-beyond-end-second")
 }
 
 func TestUnmarshalEntity_BadEllipse(t *testing.T) {
@@ -565,20 +532,14 @@ func TestUnmarshalEntity_BrokenOuterJSON(t *testing.T) {
         }
 }
 
-func TestBezierSpline_PointAt_SegClamp(t *testing.T) {
-        // 4 control points = 1 segment; t values all < 1.0 cannot trigger seg>=ns.
-        // Use 7 control points (2 segments) and verify t=0.9999 does not panic.
+func TestBezierSpline_PointAt_NearOne(t *testing.T) {
+        // t just below 1.0 on a 2-segment spline; verifies the t>=1.0 guard is not hit
+        // and the result is the correct endpoint neighbourhood.
         sp := NewBezierSpline([]Point{
                 {0, 0}, {2, 4}, {4, 4}, {6, 0},
                 {8, -4}, {10, -4}, {12, 0},
         })
-        // Force the clamp: this requires t * ns to be exactly >= ns in float64.
-        // math.Nextafter(1.0, 0) * 2 is still < 2 in practice, so the clamp is
-        // a defensive guard. Call PointAt with t just below 1.0 to verify no crash.
-        p := sp.PointAt(math.Nextafter(1.0, 0))
-        if math.IsNaN(p.X) || math.IsNaN(p.Y) {
-                t.Errorf("near-1.0 PointAt: NaN %v", p)
-        }
+        assertPointValid(t, sp.PointAt(math.Nextafter(1.0, 0)), "bezier-near-one")
 }
 
 func TestRawEntity_MarshalRoundtrip(t *testing.T) {

@@ -5,6 +5,25 @@ import (
         "testing"
 )
 
+// assertNoNaN checks that every Point in pts has finite coordinates.
+func assertNoNaN(t *testing.T, pts []Point, label string) {
+        t.Helper()
+        for _, p := range pts {
+                if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+                        t.Errorf("%s: NaN coordinate in result %v", label, pts)
+                        return
+                }
+        }
+}
+
+// assertPointValid checks that p has finite coordinates.
+func assertPointValid(t *testing.T, p Point, label string) {
+        t.Helper()
+        if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+                t.Errorf("%s: NaN coordinate: %v", label, p)
+        }
+}
+
 func TestArc_ClosestPoint_ClampToStart(t *testing.T) {
         a := Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 80, EndDeg: 100}
         p := a.ClosestPoint(Point{10, 0})
@@ -150,22 +169,19 @@ func TestIntersect_ArcLine(t *testing.T) {
 func TestIntersect_ArcRay(t *testing.T) {
         a := ArcEntity{Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 90}}
         r := RayEntity{Ray{Origin: Point{-10, 3}, Dir: Point{1, 0}}}
-        pts := Intersect(a, r)
-        _ = pts
+        assertNoNaN(t, Intersect(a, r), "arc-ray")
 }
 
 func TestIntersect_ArcCircle(t *testing.T) {
         a := ArcEntity{Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 180}}
         c := CircleEntity{Circle{Center: Point{6, 0}, Radius: 5}}
-        pts := Intersect(a, c)
-        _ = pts
+        assertNoNaN(t, Intersect(a, c), "arc-circle")
 }
 
 func TestIntersect_ArcBezier(t *testing.T) {
         a := ArcEntity{Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 180}}
         b := BezierEntity{NewBezierSpline([]Point{{-3, 3}, {0, 7}, {3, 3}, {6, -1}})}
-        pts := Intersect(a, b)
-        _ = pts
+        assertNoNaN(t, Intersect(a, b), "arc-bezier")
 }
 
 func TestIntersect_ArcNURBS(t *testing.T) {
@@ -175,15 +191,13 @@ func TestIntersect_ArcNURBS(t *testing.T) {
                 []Point{{-5, 3}, {0, 7}, {5, 3}},
                 nil,
         )}
-        pts := Intersect(a, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(a, sp), "arc-nurbs")
 }
 
 func TestIntersect_CircleBezier(t *testing.T) {
         c := CircleEntity{Circle{Center: Point{5, 2.5}, Radius: 3}}
         b := BezierEntity{NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})}
-        pts := Intersect(c, b)
-        _ = pts
+        assertNoNaN(t, Intersect(c, b), "circle-bezier")
 }
 
 func TestIntersect_CircleNURBS(t *testing.T) {
@@ -193,8 +207,7 @@ func TestIntersect_CircleNURBS(t *testing.T) {
                 []Point{{0, 0}, {5, 5}, {10, 0}},
                 nil,
         )}
-        pts := Intersect(c, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(c, sp), "circle-nurbs")
 }
 
 
@@ -205,8 +218,7 @@ func TestIntersect_PolylineNURBS(t *testing.T) {
                 []Point{{-5, 0}, {0, 5}, {5, 0}},
                 nil,
         )}
-        pts := Intersect(p, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(p, sp), "polyline-nurbs")
 }
 
 func TestIntersect_PolylineBezier(t *testing.T) {
@@ -289,8 +301,7 @@ func TestBezierSpline_NumSegments_TooFew(t *testing.T) {
 
 func TestBezierSpline_PointAt_NoControls(t *testing.T) {
         sp := BezierSpline{}
-        p := sp.PointAt(0.5)
-        _ = p
+        assertPointValid(t, sp.PointAt(0.5), "no-controls")
 }
 
 func TestBezierSpline_PointAt_TooFew(t *testing.T) {
@@ -315,14 +326,12 @@ func TestNURBSSpline_PointAt_AtHi(t *testing.T) {
                 []Point{{0, 0}, {5, 5}, {10, 0}},
                 nil,
         )
-        p := sp.PointAt(1.0)
-        _ = p
+        assertPointValid(t, sp.PointAt(1.0), "nurbs-at-hi")
 }
 
 func TestPolyline_Offset_ZeroLenSeg(t *testing.T) {
         p := Polyline{Points: []Point{{0, 0}, {0, 0}, {5, 0}}}
-        off := p.Offset(1)
-        _ = off
+        assertNoNaN(t, p.Offset(1).Points, "polyline-offset-zero-len-seg")
 }
 
 func TestPolyline_TrimAt_NearEnd(t *testing.T) {
@@ -336,8 +345,9 @@ func TestPolyline_TrimAt_NearEnd(t *testing.T) {
 func TestPolyline_TrimAt_NearStart(t *testing.T) {
         p := Polyline{Points: []Point{{0, 0}, {5, 0}, {10, 0}}}
         a, b := p.TrimAt(0.01)
-        _ = a
-        _ = b
+        if len(a.Points) < 2 || len(b.Points) < 2 {
+                t.Errorf("near-start trim: a=%d b=%d points", len(a.Points), len(b.Points))
+        }
 }
 
 
@@ -352,8 +362,7 @@ func TestIntersect_NURBSNURBS(t *testing.T) {
                 []Point{{0, 3}, {5, -2}, {10, 3}},
                 nil,
         )}
-        pts := Intersect(sp1, sp2)
-        _ = pts
+        assertNoNaN(t, Intersect(sp1, sp2), "nurbs-nurbs")
 }
 
 func TestFilterBySegment_BothOutside(t *testing.T) {

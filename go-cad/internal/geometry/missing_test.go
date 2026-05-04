@@ -172,13 +172,6 @@ func TestSegment_DistToPoint(t *testing.T) {
         }
 }
 
-func TestSegment_PerpendicularFoot(t *testing.T) {
-        s := Segment{Start: Point{0, 0}, End: Point{10, 0}}
-        // Check that PerpendicularFoot is exposed and works
-        // PerpendicularFoot is on segment.go line 102
-        _ = s.DistToPoint(Point{5, 4})
-}
-
 // ─── Polyline.DistToPoint ─────────────────────────────────────────────────────
 
 func TestPolyline_DistToPoint(t *testing.T) {
@@ -376,11 +369,9 @@ func TestBBox_Union_TwoNonEmpty(t *testing.T) {
 
 func TestBezierSpline_PointAt_OutOfRange(t *testing.T) {
         sp := NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})
-        // t beyond [0,1] should be clamped
-        p1 := sp.PointAt(-0.5)
-        p2 := sp.PointAt(1.5)
-        _ = p1
-        _ = p2
+        // t outside [0,1] extrapolates the cubic; result must be finite (no NaN/Inf).
+        assertPointValid(t, sp.PointAt(-0.5), "bezier t=-0.5")
+        assertPointValid(t, sp.PointAt(1.5), "bezier t=1.5")
 }
 
 func TestBezierSpline_NumSegments(t *testing.T) {
@@ -403,15 +394,18 @@ func TestNURBSSpline_ApproxPolyline_Empty(t *testing.T) {
 
 func TestSegment_PerpendicularFoot_Coverage(t *testing.T) {
         s := Segment{Start: Point{0, 0}, End: Point{10, 0}}
-        // We need to ensure segment.go:PerpendicularFoot is called.
-        // It is called by Arc.ClosestPoint and Polyline.ClosestPoint internally.
-        // Force a path through it by calling Polyline.ClosestPoint.
+        // PerpendicularFoot is exercised via Polyline.ClosestPoint.
         p := Polyline{Points: []Point{{0, 0}, {10, 0}}}
         cp := p.ClosestPoint(Point{5, 5})
         if math.Abs(cp.X-5) > 1e-9 {
                 t.Errorf("polyline closest: %v", cp)
         }
-        _ = s
+        // Also verify the Line.PerpendicularFoot directly (same math, different receiver).
+        l := Line{P: s.Start, Q: s.End}
+        foot := l.PerpendicularFoot(Point{3, 7})
+        if math.Abs(foot.X-3) > 1e-9 || math.Abs(foot.Y) > 1e-9 {
+                t.Errorf("PerpendicularFoot: %v", foot)
+        }
 }
 
 // ─── intersectOrdererd remaining branches ─────────────────────────────────────
@@ -423,8 +417,7 @@ func TestIntersect_BezierNURBS(t *testing.T) {
                 []Point{{0, 3}, {5, -2}, {10, 3}},
                 nil,
         )}
-        pts := Intersect(b, sp)
-        _ = pts
+        assertNoNaN(t, Intersect(b, sp), "bezier×nurbs")
 }
 
 func TestIntersect_PolylinePolyline(t *testing.T) {
