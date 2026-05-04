@@ -62,3 +62,27 @@ A standalone Go module living under `go-cad/` — a modular, open-source CAD eng
 - **cmd/cad REPL**: `IMPORT file.dxf` and `EXPORTSVG file.svg` commands
 - **WASM bridge**: `cadFindSnap(x,y,radius,mask)` → JSON snap result; complete layer CRUD API
 - **Browser UI**: Snap marker SVG overlay with type-specific symbols and colors; F3 key toggle; Layer Manager modal with live editing (name, color, visibility, lock, freeze); frozen/invisible layers hidden from canvas; layer dropdown synced with document state
+
+### Task #8 features (Browser UI Modernisation)
+- **ES module split**: monolithic 2176-line `index.html` split into 12 ES modules in `go-cad/web/js/`
+  - `state.js` — shared mutable state, `w2s`/`s2w` transforms, `setStatus`, `escH`, block cache helpers
+  - `canvas.js` — all rendering (grid, entities, rubber-band preview, NURBS evaluator, dimension drawers)
+  - `tools.js` — `setTool`, `commitEntity`, `applyCoordInput`, mouse handlers (pan/zoom/click/move)
+  - `commands.js` — full command parser, `processCommand`, keyboard shortcuts, DXF export
+  - `snap.js` — snap engine wrappers, snap toolbar init, snap marker draw, settings persistence
+  - `inspector.js` — right-panel Properties Inspector; live-edit color/layer/text/rotation/textHeight
+  - `dialogs.js` — Layer Manager, Block Manager, Symbols, Drafting Settings, Print/Plot modals
+  - `panels.js` — resizable three-column panel layout (left/center/right + bottom) with localStorage
+  - `history.js` — command history list in bottom panel; click to replay
+  - `welcome.js` — first-run welcome overlay with shortcuts cheatsheet
+  - `wasm.js` — WASM loader + in-browser demo stubs for all `cad*` functions
+  - `app.js` — bootstrap entry point; wires all modules; keyboard shortcuts
+- **New index.html**: full panel layout (left sidebar · canvas · right inspector) with 220+ CSS lines
+- **Go WASM bridge**: `cadSetEntityProp(id, field, value)` — live entity property editing with undo
+- **Go document**: `Document.SetEntityProp` method for color/layer/text/rotDeg/textHeight mutation
+- **Snap toolbar row**: 8 coloured per-mode buttons (End/Mid/Cen/Quad/Int/Per/Tan/Nea) with snap popover
+- **Coordinate input bar**: absolute `x,y`, relative `@dx,dy`, polar `@dist<angle` entry
+- **Drafting Settings dialog**: grid spacing, units, precision, default colour
+- **Print/Plot dialog**: PDF (browser print) or PNG (canvas snapshot) export
+- **Startup welcome screen**: shown on first visit; new/open shortcuts; keyboard cheatsheet
+- **Server**: `cmd/serve` workflow configured on port 8099; WASM binary 4.1 MB

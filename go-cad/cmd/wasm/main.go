@@ -818,6 +818,16 @@ func main() {
                 return string(b)
         }))
 
+        // cadSetEntityProp(id, field, value) → bool
+        // Updates a single named field of an entity in-place with undo support.
+        // field: "color"|"layer"|"text"|"rotDeg"|"textHeight"
+        js.Global().Set("cadSetEntityProp", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 3 {
+                        return false
+                }
+                return doc.SetEntityProp(a[0].Int(), a[1].String(), a[2].String())
+        }))
+
         // cadInsertSymbol(name, x, y, scale, rotDeg, layer, color) → entity ID
         // Inserts a built-in symbol block reference (auto-defines if not already present).
         js.Global().Set("cadInsertSymbol", js.FuncOf(func(_ js.Value, a []js.Value) any {

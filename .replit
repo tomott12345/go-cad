@@ -11,6 +11,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "go-cad Dev Server"
+
+[[workflows.workflow]]
+name = "go-cad Dev Server"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd go-cad && go build -o /tmp/go-cad-serve ./cmd/serve/ && PORT=8099 /tmp/go-cad-serve -host 0.0.0.0"
+waitForPort = 8099
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -26,3 +47,7 @@ externalPort = 8080
 [[ports]]
 localPort = 8081
 externalPort = 80
+
+[[ports]]
+localPort = 8099
+externalPort = 8099

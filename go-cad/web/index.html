@@ -5,242 +5,362 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>go-cad</title>
 <style>
+/* ── Reset & tokens ──────────────────────────────────────────────────────────── */
 *{box-sizing:border-box;margin:0;padding:0}
-body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#ccc;font:13px/1.4 'Segoe UI',system-ui,sans-serif;overflow:hidden}
+:root{
+  --bg:#1e1e1e;--panel-bg:#252526;--panel-border:#3e3e42;
+  --toolbar-bg:#2d2d2d;--accent:#0078d4;--accent-hover:#0060a8;
+  --text:#d4d4d4;--text-dim:#888;--btn-bg:#3a3a3a;--btn-hover:#505050;
+  --input-bg:#1a1a1a;--snap-on:#005f1f;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px/1.4 'Segoe UI',system-ui,sans-serif}
 
-#toolbar{display:flex;align-items:center;gap:4px;padding:6px 8px;background:#2d2d2d;border-bottom:1px solid #444;flex-shrink:0;flex-wrap:wrap}
-#toolbar button{padding:4px 10px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px;white-space:nowrap}
-#toolbar button:hover{background:#505050}
-#toolbar button.active{background:#0078d4;border-color:#0060a8;color:#fff}
-#toolbar button.snap-on{background:#005f1f;border-color:#007a28;color:#6effa0}
-#toolbar .sep{width:1px;height:24px;background:#555;margin:0 4px;flex-shrink:0}
-#layer-sel,#export-fmt{background:#3a3a3a;border:1px solid #555;border-radius:4px;color:#ccc;font-size:12px;padding:3px 6px}
-#color-inp{width:36px;height:26px;border:1px solid #555;border-radius:4px;padding:2px;cursor:pointer;background:transparent}
+/* ── Top bar ─────────────────────────────────────────────────────────────────── */
+#topbar{display:flex;flex-direction:column;flex-shrink:0;background:var(--toolbar-bg);border-bottom:1px solid var(--panel-border)}
 
-/* ── Block Manager Modal (Task #7) ──────────────────────────────────────── */
-#block-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
-#block-modal.open{display:flex}
-#block-panel{background:#252525;border:1px solid #555;border-radius:6px;width:520px;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
-#block-panel h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd;display:flex;justify-content:space-between;align-items:center}
+/* ── Main toolbar ─────────────────────────────────────────────────────────────── */
+#main-toolbar{display:flex;align-items:center;gap:3px;padding:4px 8px;flex-wrap:wrap;min-height:36px}
+#main-toolbar button{padding:3px 9px;border:1px solid #555;border-radius:4px;background:var(--btn-bg);color:var(--text);cursor:pointer;font-size:11px;white-space:nowrap;transition:background .12s}
+#main-toolbar button:hover{background:var(--btn-hover)}
+#main-toolbar button.active{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+#main-toolbar button.snap-on{background:var(--snap-on);border-color:#007a28;color:#6effa0}
+#main-toolbar .sep{width:1px;height:22px;background:#555;margin:0 3px;flex-shrink:0}
+#main-toolbar select,#layer-sel,#export-fmt{background:var(--btn-bg);border:1px solid #555;border-radius:4px;color:var(--text);font-size:11px;padding:2px 5px;cursor:pointer}
+#color-inp{width:32px;height:24px;border:1px solid #555;border-radius:4px;padding:1px;cursor:pointer;background:transparent}
+
+/* ── Snap toolbar row ─────────────────────────────────────────────────────────── */
+#snap-toolbar-row{display:flex;align-items:center;gap:4px;padding:3px 8px;background:#282828;border-bottom:1px solid var(--panel-border);flex-wrap:wrap;flex-shrink:0}
+#snap-toolbar-row label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-right:2px}
+.snap-bar-btn{padding:2px 7px;border:1px solid #444;border-radius:3px;background:var(--input-bg);color:var(--text-dim);cursor:pointer;font-size:10px;position:relative;transition:background .12s,color .12s,border-color .12s}
+.snap-bar-btn::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--snap-color,#888);margin-right:3px;vertical-align:middle}
+.snap-bar-btn.snap-bar-on{background:#003a1a;border-color:var(--snap-color,#888);color:#a8ffb0}
+.snap-bar-btn:hover{background:var(--btn-hover);color:var(--text)}
+#btn-snap{padding:2px 9px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text-dim);cursor:pointer;font-size:11px;font-weight:600}
+#btn-snap.snap-on{background:var(--snap-on);border-color:#007a28;color:#6effa0}
+#snap-divider{width:1px;height:18px;background:#555;margin:0 2px}
+
+/* ── Coordinate input bar ─────────────────────────────────────────────────────── */
+#coord-bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:#242424;border-bottom:1px solid var(--panel-border);flex-shrink:0;font-size:11px}
+#coord-bar label{color:var(--text-dim);white-space:nowrap}
+#coord-input{flex:0 0 220px;background:var(--input-bg);border:1px solid #555;border-radius:3px;color:var(--text);font-size:11px;padding:2px 6px;outline:none}
+#coord-input:focus{border-color:var(--accent)}
+#coord-readout{color:#556;font-size:10px;min-width:180px}
+#coord-bar .coord-hint{color:#444;font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Workspace (three-column) ─────────────────────────────────────────────────── */
+#workspace{display:flex;flex-direction:row;flex:1;overflow:hidden;min-height:0}
+
+/* ── Left panel ───────────────────────────────────────────────────────────────── */
+#left-panel{width:200px;min-width:100px;max-width:400px;background:var(--panel-bg);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+
+/* ── Vertical splitters ───────────────────────────────────────────────────────── */
+.vsplitter{width:4px;background:var(--panel-border);cursor:col-resize;flex-shrink:0;transition:background .15s}
+.vsplitter:hover{background:var(--accent)}
+
+/* ── Center column ────────────────────────────────────────────────────────────── */
+#center-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#viewport{flex:1;position:relative;overflow:hidden;min-height:0}
+#canvas{display:block;cursor:crosshair;position:absolute;inset:0}
+
+/* ── Horizontal splitter ──────────────────────────────────────────────────────── */
+.hsplitter{height:4px;background:var(--panel-border);cursor:row-resize;flex-shrink:0;transition:background .15s}
+.hsplitter:hover{background:var(--accent)}
+
+/* ── Bottom panel (History + command) ────────────────────────────────────────── */
+#bottom-panel{height:160px;min-height:40px;background:var(--panel-bg);display:flex;flex-direction:column;flex-shrink:0}
+#history-list{flex:1;overflow-y:auto;font-size:11px;font-family:monospace;padding:2px 6px}
+.hist-entry{display:flex;align-items:baseline;gap:6px;padding:1px 0;cursor:pointer;border-radius:2px}
+.hist-entry:hover{background:#2a2a2a}
+.hist-time{color:#555;flex-shrink:0;font-size:10px}
+.hist-cmd{color:#a8d8a8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-result{color:#777;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+
+/* ── Right panel ──────────────────────────────────────────────────────────────── */
+#right-panel{width:240px;min-width:140px;max-width:440px;background:var(--panel-bg);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+
+/* ── Panel sections ───────────────────────────────────────────────────────────── */
+.panel-section{border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;background:#2a2a2a;font-size:11px;font-weight:600;color:#bbb;text-transform:uppercase;letter-spacing:.4px;user-select:none}
+.panel-header .header-actions{display:flex;gap:4px}
+.collapse-btn{background:none;border:none;color:#888;cursor:pointer;font-size:10px;padding:0;line-height:1}
+.collapse-btn:hover{color:#ccc}
+.panel-content{padding:6px}
+
+/* ── Properties Inspector ─────────────────────────────────────────────────────── */
+.insp-empty{color:var(--text-dim);font-size:11px;padding:10px 6px;text-align:center;line-height:1.6}
+.insp-type-row{display:flex;align-items:baseline;gap:6px;padding:4px 6px;border-bottom:1px solid var(--panel-border);margin-bottom:4px}
+.insp-type{font-weight:700;font-size:12px;color:#7ec8e3}
+.insp-id{font-size:10px;color:#555}
+.insp-table{display:flex;flex-direction:column;gap:2px;padding:0 2px}
+.insp-row{display:flex;align-items:center;gap:4px;min-height:22px}
+.insp-label{font-size:10px;color:var(--text-dim);min-width:72px;flex-shrink:0;text-align:right;padding-right:4px}
+.insp-value{font-size:11px;color:#c8c8c8;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.insp-field{flex:1;background:var(--input-bg);border:1px solid #444;border-radius:2px;color:var(--text);font-size:11px;padding:1px 4px;min-width:0;outline:none}
+.insp-field:focus{border-color:var(--accent)}
+.insp-field[type=color]{width:36px;height:20px;padding:1px;cursor:pointer;flex:none}
+.insp-field[type=number]{font-family:monospace}
+
+/* ── Command bar ──────────────────────────────────────────────────────────────── */
+#cmdbar{display:flex;align-items:center;gap:8px;padding:3px 8px;background:#202020;border-top:1px solid var(--panel-border);flex-shrink:0;min-height:28px}
+#status{flex:1;color:var(--text-dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cmd-input{flex:0 0 300px;background:var(--input-bg);border:1px solid #555;border-radius:4px;color:var(--text);font-size:11px;padding:3px 8px;outline:none}
+#cmd-input:focus{border-color:var(--accent)}
+#coords-display{color:#556;font-size:10px;min-width:140px;text-align:right;font-family:monospace}
+#cmdbar select{background:var(--btn-bg);border:1px solid #555;border-radius:4px;color:var(--text);font-size:11px;padding:1px 5px}
+
+/* ── Welcome overlay ─────────────────────────────────────────────────────────── */
+#welcome-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center}
+#welcome-box{background:#252526;border:1px solid #555;border-radius:10px;padding:32px 40px;max-width:480px;width:90%;text-align:center;box-shadow:0 12px 48px rgba(0,0,0,.8)}
+#welcome-box h1{font-size:28px;font-weight:700;color:#7ec8e3;margin-bottom:6px;letter-spacing:-0.5px}
+#welcome-box .subtitle{color:#888;font-size:13px;margin-bottom:28px}
+#welcome-box .btn-group{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#welcome-box button{padding:9px 22px;border:1px solid #555;border-radius:6px;font-size:13px;cursor:pointer;transition:background .15s}
+#btn-welcome-new{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+#btn-welcome-new:hover{background:var(--accent-hover)}
+#btn-welcome-open{background:var(--btn-bg);color:var(--text)}
+#btn-welcome-open:hover{background:var(--btn-hover)}
+#btn-welcome-close{background:transparent;color:#666;border-color:#444}
+#btn-welcome-close:hover{color:#aaa}
+#welcome-box .shortcuts{margin-top:22px;text-align:left;border-top:1px solid #333;padding-top:16px}
+#welcome-box .shortcuts h3{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+#welcome-box .shortcuts dl{display:grid;grid-template-columns:1fr 2fr;gap:4px 10px;font-size:11px}
+#welcome-box .shortcuts dt{color:#888;text-align:right}
+#welcome-box .shortcuts dd{color:#bbb}
+
+/* ── Modals (layers, blocks, symbols, drafting, print) ───────────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#252525;border:1px solid #555;border-radius:6px;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.modal-box h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd;display:flex;justify-content:space-between;align-items:center}
+.modal-box h3 button{padding:2px 8px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.modal-box h3 button:hover{background:var(--btn-hover)}
+.modal-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
+.modal-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:var(--btn-bg);color:var(--text);cursor:pointer;font-size:12px}
+.modal-footer button:hover{background:var(--btn-hover)}
+.modal-footer button.primary{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+.modal-footer button.primary:hover{background:var(--accent-hover)}
+
+/* Layer modal */
+#layer-modal .modal-box{width:640px;max-height:80vh}
+#layer-table-wrap{overflow-y:auto;flex:1}
+#layer-table{width:100%;border-collapse:collapse;font-size:11px}
+#layer-table th{padding:4px 7px;background:#2d2d2d;border-bottom:1px solid #444;text-align:left;color:#aaa;font-weight:600;position:sticky;top:0}
+#layer-table td{padding:3px 7px;border-bottom:1px solid #333;vertical-align:middle}
+#layer-table tr:hover td{background:#2a2a2a}
+#layer-table input[type=text]{background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:11px;padding:2px 5px;width:100%}
+#layer-table input[type=color]{width:26px;height:20px;border:1px solid #444;border-radius:3px;padding:1px;cursor:pointer;background:transparent}
+#layer-table select{background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:11px;padding:1px 4px}
+.layer-check{cursor:pointer;accent-color:var(--accent)}
+.layer-btn{padding:1px 7px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.layer-btn:hover{background:var(--btn-hover)}
+.layer-del{color:#c0392b;border-color:#7b241c}
+.layer-del:hover{background:#7b241c}
+
+/* Block modal */
+#block-modal .modal-box{width:520px;max-height:75vh}
 #block-list{overflow-y:auto;flex:1;padding:8px}
-.block-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #333;font-size:12px;color:#ccc}
+.block-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid #333;font-size:12px;color:var(--text)}
 .block-item:hover{background:#2a2a2a}
 .block-thumb{width:72px;height:54px;flex:0 0 72px;background:#111;border:1px solid #444;border-radius:3px}
 .block-info{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
 .block-name{font-weight:600;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.block-meta{color:#888;font-size:11px}
-.block-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
-.block-insert-btn:hover{background:#0078d4;border-color:#0060a8;color:#fff}
-#block-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
-#block-panel-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px}
-#block-panel-footer button:hover{background:#505050}
+.block-meta{color:#888;font-size:10px}
+.block-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.block-insert-btn:hover{background:var(--accent);border-color:var(--accent-hover);color:#fff}
 
-/* ── Symbols Modal (Task #7) ─────────────────────────────────────────────── */
-#sym-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
-#sym-modal.open{display:flex}
-#sym-panel{background:#252525;border:1px solid #555;border-radius:6px;width:420px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
-#sym-panel h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd}
-#sym-list{overflow-y:auto;flex:1;padding:8px}
-.sym-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #333;font-size:12px;cursor:pointer;color:#ccc}
-.sym-item:hover{background:#2a2a2a;color:#fff}
+/* Sym modal */
+#sym-modal .modal-box{width:380px;max-height:60vh}
+#sym-list{overflow-y:auto;flex:1;padding:6px}
+.sym-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid #333;font-size:12px;color:var(--text)}
+.sym-item:hover{background:#2a2a2a}
 .sym-item span{flex:1}
-.sym-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
-.sym-insert-btn:hover{background:#0078d4;border-color:#0060a8;color:#fff}
-#sym-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
-#sym-panel-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px}
+.sym-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.sym-insert-btn:hover{background:var(--accent);border-color:var(--accent-hover);color:#fff}
 
-/* ── Hatch pattern picker (Task #7) ─────────────────────────────────────── */
-#hatch-bar{display:none;align-items:center;gap:6px;padding:4px 10px;background:#2a2a2a;border-top:1px solid #333;font-size:11px;color:#aaa}
+/* Hatch bar */
+#hatch-bar{display:none;align-items:center;gap:5px;padding:3px 8px;background:#282828;border-top:1px solid #333;font-size:11px;color:#aaa;flex-shrink:0}
 #hatch-bar.open{display:flex}
-#hatch-bar select,#hatch-bar input[type=number]{background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:11px;padding:2px 5px}
-#hatch-bar input[type=number]{width:55px}
+#hatch-bar select,#hatch-bar input[type=number]{background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:11px;padding:1px 5px}
+#hatch-bar input[type=number]{width:52px}
 
-/* ── Layer Manager Modal ─────────────────────────────────────────────────── */
-#layer-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
-#layer-modal.open{display:flex}
-#layer-panel{background:#252525;border:1px solid #555;border-radius:6px;width:620px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
-#layer-panel h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd;display:flex;justify-content:space-between;align-items:center}
-#layer-panel h3 button{padding:2px 8px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
-#layer-table-wrap{overflow-y:auto;flex:1}
-#layer-table{width:100%;border-collapse:collapse;font-size:12px}
-#layer-table th{padding:5px 8px;background:#2d2d2d;border-bottom:1px solid #444;text-align:left;color:#aaa;font-weight:600;white-space:nowrap;position:sticky;top:0}
-#layer-table td{padding:4px 8px;border-bottom:1px solid #333;vertical-align:middle}
-#layer-table tr:hover td{background:#2a2a2a}
-#layer-table input[type=text]{background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:12px;padding:2px 5px;width:100%}
-#layer-table input[type=color]{width:28px;height:22px;border:1px solid #444;border-radius:3px;padding:1px;cursor:pointer;background:transparent}
-.layer-check{cursor:pointer;accent-color:#0078d4}
-.layer-btn{padding:2px 7px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer;white-space:nowrap}
-.layer-btn:hover{background:#505050}
-.layer-del{color:#c0392b;border-color:#7b241c}
-.layer-del:hover{background:#7b241c}
-#layer-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
-#layer-panel-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px}
-#layer-panel-footer button:hover{background:#505050}
-#layer-panel-footer button.primary{background:#0078d4;border-color:#0060a8;color:#fff}
-
-/* ── Snap Settings popover ───────────────────────────────────────────────── */
-#snap-settings{display:none;position:absolute;top:44px;left:0;background:#252525;border:1px solid #555;
-  border-radius:5px;padding:10px 14px;z-index:200;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+/* Snap Settings Popover */
+#snap-settings{display:none;position:absolute;top:36px;left:0;background:#252525;border:1px solid #555;border-radius:5px;padding:10px 12px;z-index:300;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.7)}
 #snap-settings.open{display:block}
-#snap-settings h4{font-size:11px;color:#888;margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px}
-.snap-row{display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px;color:#ccc}
-.snap-row input{accent-color:#0078d4;cursor:pointer}
-.snap-swatch{width:10px;height:10px;border-radius:1px;flex-shrink:0}
+#snap-settings h4{font-size:10px;color:#888;margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px}
+.snap-row{display:flex;align-items:center;gap:7px;padding:2px 0;cursor:pointer;font-size:11px;color:var(--text)}
+.snap-row input{accent-color:var(--accent);cursor:pointer}
+.snap-swatch{width:9px;height:9px;border-radius:1px;flex-shrink:0}
 #snap-settings-footer{display:flex;gap:6px;margin-top:8px;padding-top:7px;border-top:1px solid #333}
-#snap-settings-footer button{flex:1;padding:3px 0;font-size:11px;border:1px solid #555;border-radius:3px;
-  background:#3a3a3a;color:#ccc;cursor:pointer}
-#snap-settings-footer button:hover{background:#505050}
+#snap-settings-footer button{flex:1;padding:3px 0;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+#snap-settings-footer button:hover{background:var(--btn-hover)}
 
-/* ── Snap marker overlay ─────────────────────────────────────────────────── */
-#snap-marker{position:absolute;pointer-events:none;display:none}
+/* Snap marker overlay */
+#snap-marker{position:absolute;pointer-events:none;display:none;top:0;left:0}
 #snap-marker svg{overflow:visible}
 
-#viewport{flex:1;position:relative;overflow:hidden}
-#canvas{display:block;cursor:crosshair}
+/* Drafting Settings */
+#drafting-modal .modal-box{width:440px}
+.ds-form{padding:14px;display:flex;flex-direction:column;gap:10px}
+.ds-section{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;border-bottom:1px solid #333;padding-bottom:3px}
+.ds-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.ds-row label{min-width:100px;color:#bbb;text-align:right}
+.ds-row input,.ds-row select{flex:1;background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:12px;padding:3px 6px;outline:none}
+.ds-row input:focus,.ds-row select:focus{border-color:var(--accent)}
+.ds-row input[type=checkbox]{flex:none;accent-color:var(--accent)}
+.ds-row input[type=color]{width:40px;height:24px;padding:1px;cursor:pointer}
 
-#cmdbar{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#252525;border-top:1px solid #444;flex-shrink:0;min-height:30px}
-#status{flex:1;color:#888;font-size:12px}
-#cmd-input{flex:0 0 320px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#ccc;font-size:12px;padding:4px 8px;outline:none}
-#cmd-input:focus{border-color:#0078d4}
-#coords{color:#666;font-size:11px;min-width:160px;text-align:right}
+/* Print/Plot */
+#print-modal .modal-box{width:400px}
+.print-form{padding:14px;display:flex;flex-direction:column;gap:10px}
+.print-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.print-row label{min-width:100px;color:#bbb;text-align:right}
+.print-row select{flex:1;background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:12px;padding:3px 6px}
+
+/* Block library (right panel) */
+.block-lib-item{display:flex;align-items:center;gap:6px;padding:3px 4px;border-bottom:1px solid #2a2a2a;cursor:pointer;font-size:11px;color:#bbb;border-radius:3px}
+.block-lib-item:hover{background:#2d2d2d}
+.block-lib-icon{width:28px;height:22px;background:#111;border:1px solid #333;border-radius:2px;flex-shrink:0}
+
+/* Layer quick sidebar */
+.layer-quick-row{display:flex;align-items:center;gap:4px;padding:2px 4px;font-size:11px;cursor:pointer;border-radius:2px}
+.layer-quick-row:hover{background:#2d2d2d}
+.layer-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 </style>
 </head>
 <body>
-<!-- ── Toolbar ─────────────────────────────────────────────────────────────── -->
-<div id="toolbar">
-  <!-- Primitives -->
-  <button id="tool-line"    class="active" title="Line (L)">Line</button>
-  <button id="tool-circle"  title="Circle (C)">Circle</button>
-  <button id="tool-arc"     title="Arc (A)">Arc</button>
-  <button id="tool-rect"    title="Rectangle (R)">Rect</button>
-  <button id="tool-poly"    title="Polyline (P)">Polyline</button>
 
-  <div class="sep"></div>
+<!-- ── Welcome Overlay ───────────────────────────────────────────────────────── -->
+<div id="welcome-overlay">
+  <div id="welcome-box">
+    <h1>go-cad</h1>
+    <p class="subtitle">Open-source browser CAD — zero dependencies, WASM-powered</p>
+    <div class="btn-group">
+      <button id="btn-welcome-new">New Drawing</button>
+      <button id="btn-welcome-open">Open DXF…</button>
+      <button id="btn-welcome-close">Skip</button>
+    </div>
+    <div class="shortcuts">
+      <h3>Quick Start</h3>
+      <dl>
+        <dt>L, C, A, R, P</dt><dd>Line, Circle, Arc, Rect, Polyline</dd>
+        <dt>T, S, N, E</dt><dd>Text, Spline, NURBS, Ellipse</dd>
+        <dt>Ctrl+Z / Y</dt><dd>Undo / Redo</dd>
+        <dt>F3</dt><dd>Toggle Object Snap</dd>
+        <dt>ZF or Fit button</dt><dd>Zoom to fit all entities</dd>
+        <dt>Middle drag / Ctrl+drag</dt><dd>Pan canvas</dd>
+        <dt>Scroll wheel</dt><dd>Zoom in / out</dd>
+      </dl>
+    </div>
+  </div>
+</div>
 
-  <!-- Advanced splines (Task #3) -->
-  <button id="tool-spline"  title="Cubic Bezier Spline (S) — click ≥4 pts, Enter to finish">Spline</button>
-  <button id="tool-nurbs"   title="NURBS B-Spline (N) — click ≥4 pts, Enter to finish">NURBS</button>
+<!-- ── Top Bar ───────────────────────────────────────────────────────────────── -->
+<div id="topbar">
 
-  <div class="sep"></div>
+  <!-- Main toolbar -->
+  <div id="main-toolbar">
+    <!-- Draw primitives -->
+    <button id="tool-line"    class="active" title="Line (L)">Line</button>
+    <button id="tool-circle"  title="Circle (C)">Circle</button>
+    <button id="tool-arc"     title="Arc (A)">Arc</button>
+    <button id="tool-rect"    title="Rectangle (R)">Rect</button>
+    <button id="tool-poly"    title="Polyline (P)">Poly</button>
+    <div class="sep"></div>
+    <button id="tool-spline"  title="Cubic Bezier Spline (S)">Spline</button>
+    <button id="tool-nurbs"   title="NURBS B-Spline (N)">NURBS</button>
+    <button id="tool-ellipse" title="Ellipse (E)">Ellipse</button>
+    <div class="sep"></div>
+    <button id="tool-text"   title="Single-line Text (T)">Text</button>
+    <button id="tool-mtext"  title="Multi-line Text (MT)">MText</button>
+    <div class="sep"></div>
+    <button id="tool-dimlin"  title="Linear Dimension">DimLin</button>
+    <button id="tool-dimali"  title="Aligned Dimension">DimAli</button>
+    <button id="tool-dimang"  title="Angular Dimension">DimAng</button>
+    <button id="tool-dimrad"  title="Radial Dimension">DimRad</button>
+    <button id="tool-dimdia"  title="Diameter Dimension">DimDia</button>
+    <div class="sep"></div>
+    <button id="tool-move"       title="Move (M)">Move</button>
+    <button id="tool-copy"       title="Copy (CP)">Copy</button>
+    <button id="tool-rotate"     title="Rotate (RO)">Rotate</button>
+    <button id="tool-scale"      title="Scale (SC)">Scale</button>
+    <button id="tool-mirror"     title="Mirror (MI)">Mirror</button>
+    <button id="tool-trim"       title="Trim (TR)">Trim</button>
+    <button id="tool-extend"     title="Extend (EX)">Extend</button>
+    <button id="tool-fillet"     title="Fillet (F)">Fillet</button>
+    <button id="tool-chamfer"    title="Chamfer (CHA)">Chamfer</button>
+    <button id="tool-arrayrect"  title="Rectangular Array (AR)">ArrRect</button>
+    <button id="tool-arraypolar" title="Polar Array (AP)">ArrPolar</button>
+    <button id="tool-offset"     title="Offset (O)">Offset</button>
+    <div class="sep"></div>
+    <button id="tool-hatch"    title="Hatch fill (H)">Hatch</button>
+    <button id="tool-leader"   title="Leader annotation (LD)">Leader</button>
+    <button id="tool-revcloud" title="Revision Cloud (RC)">RevCloud</button>
+    <button id="tool-wipeout"  title="Wipeout mask (WP)">Wipeout</button>
+    <div class="sep"></div>
+    <button id="btn-blocks"  title="Block Manager…">Blocks…</button>
+    <button id="btn-symbols" title="Insert Symbol…">Symbols…</button>
+    <div class="sep"></div>
+    <button id="btn-open"    title="Open DXF (Ctrl+O)">Open…</button>
+    <input id="file-input" type="file" accept=".dxf" style="display:none">
+    <button id="btn-undo"    title="Undo (Ctrl+Z)">Undo</button>
+    <button id="btn-redo"    title="Redo (Ctrl+Y)">Redo</button>
+    <button id="btn-del"     title="Delete selected (Del)">Delete</button>
+    <button id="btn-clear"   title="Clear all">Clear</button>
+    <button id="btn-zoomfit" title="Zoom to fit (ZF)">Fit</button>
+    <div class="sep"></div>
+    <button id="btn-export"   title="Export">Export</button>
+    <select id="export-fmt" title="Export format">
+      <option value="r2000">DXF R2000</option>
+      <option value="r12">DXF R12</option>
+      <option value="svg">SVG</option>
+    </select>
+    <div class="sep"></div>
+    <button id="btn-print"    title="Print / Plot…">Print…</button>
+    <button id="btn-drafting" title="Drafting Settings…">Settings…</button>
+    <div class="sep"></div>
+    <label style="color:var(--text-dim);font-size:10px">Layer</label>
+    <select id="layer-sel" title="Current drawing layer"></select>
+    <button id="btn-layers" title="Layer Manager…">Layers…</button>
+    <input type="color" id="color-inp" value="#00ff00" title="Entity colour">
+  </div>
 
-  <!-- Shape / text (Task #3) -->
-  <button id="tool-ellipse" title="Ellipse (E) — centre, semi-major tip, semi-minor tip">Ellipse</button>
-  <button id="tool-text"    title="Single-line Text (T)">Text</button>
-  <button id="tool-mtext"   title="Multi-line Text (MT) — type \\n for line breaks">MText</button>
-
-  <div class="sep"></div>
-
-  <!-- Dimensions (Task #3) -->
-  <button id="tool-dimlin"  title="Linear Dimension">DimLin</button>
-  <button id="tool-dimali"  title="Aligned Dimension">DimAli</button>
-  <button id="tool-dimang"  title="Angular Dimension">DimAng</button>
-  <button id="tool-dimrad"  title="Radial Dimension">DimRad</button>
-  <button id="tool-dimdia"  title="Diameter Dimension">DimDia</button>
-
-  <div class="sep"></div>
-
-  <!-- Edit operations (Task #4) -->
-  <button id="tool-move"       title="Move (M) — select entity, type: MOVE dx dy">Move</button>
-  <button id="tool-copy"       title="Copy (CP) — select entity, type: COPY dx dy">Copy</button>
-  <button id="tool-rotate"     title="Rotate (RO) — select entity, type: ROTATE angle [cx cy]">Rotate</button>
-  <button id="tool-scale"      title="Scale (SC) — select entity, type: SCALE factor [cx cy]">Scale</button>
-  <button id="tool-mirror"     title="Mirror (MI) — click two pts on mirror axis">Mirror</button>
-  <button id="tool-trim"       title="Trim (TR) — click cutter, then part to remove">Trim</button>
-  <button id="tool-extend"     title="Extend (EX) — click boundary, then end to extend">Extend</button>
-  <button id="tool-fillet"     title="Fillet (F) — select two lines, type: FILLET radius">Fillet</button>
-  <button id="tool-chamfer"    title="Chamfer (CHA) — select two lines, type: CHAMFER d1 d2">Chamfer</button>
-  <button id="tool-arrayrect"  title="Rect Array (AR) — select entity, type: ARRAYRECT rows cols dy dx">ArrayRect</button>
-  <button id="tool-arraypolar" title="Polar Array (AP) — select entity, type: ARRAYPOLAR count angle [cx cy]">ArrayPolar</button>
-  <button id="tool-offset"     title="Offset (O) — select entity, type: OFFSET dist  (e.g. OFFSET 5 or OFFSET -3)">Offset</button>
-
-  <div class="sep"></div>
-
-  <!-- Task #7: Blocks, Hatching & Annotations -->
-  <button id="tool-hatch"    title="Hatch fill (H) — click polygon vertices, Enter to finish">Hatch</button>
-  <button id="tool-leader"   title="Leader annotation (LD) — click vertices, Enter to finish">Leader</button>
-  <button id="tool-revcloud" title="Revision Cloud (RC) — click polygon vertices, Enter to finish">RevCloud</button>
-  <button id="tool-wipeout"  title="Wipeout mask (WP) — click polygon vertices, Enter to finish">Wipeout</button>
-  <button id="btn-blocks"    title="Block Manager…">Blocks…</button>
-  <button id="btn-symbols"   title="Insert Symbol…">Symbols…</button>
-
-  <div class="sep"></div>
-
-  <!-- File ops (Task #6) -->
-  <button id="btn-open"    title="Open DXF file (Ctrl+O)">Open…</button>
-  <input id="file-input" type="file" accept=".dxf" style="display:none">
-
-  <!-- Ops -->
-  <button id="btn-undo"    title="Undo (Ctrl+Z)">Undo</button>
-  <button id="btn-redo"    title="Redo (Ctrl+Y)">Redo</button>
-  <button id="btn-del"     title="Delete selected (Del)">Delete</button>
-  <button id="btn-clear"   title="Clear all">Clear</button>
-  <button id="btn-zoomfit" title="Zoom to fit (ZF)">Fit</button>
-  <button id="btn-export"  title="Export in selected format">Export</button>
-
-  <div class="sep"></div>
-
-  <!-- Snap (Task #5) — toggle + settings popover -->
-  <div style="position:relative">
-    <button id="btn-snap" class="snap-on" title="Object Snap toggle (F3)">Snap ✓</button>
-    <button id="btn-snap-settings" title="Snap settings"
-      style="padding:4px 6px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:11px">⚙</button>
-    <div id="snap-settings">
-      <h4>Object Snap Modes</h4>
-      <label class="snap-row"><input type="checkbox" id="snp-endpoint"      checked><span class="snap-swatch" style="background:#ff4444"></span>Endpoint</label>
-      <label class="snap-row"><input type="checkbox" id="snp-midpoint"      checked><span class="snap-swatch" style="background:#44ff44"></span>Midpoint</label>
-      <label class="snap-row"><input type="checkbox" id="snp-center"        checked><span class="snap-swatch" style="background:#4488ff"></span>Center</label>
-      <label class="snap-row"><input type="checkbox" id="snp-quadrant"      checked><span class="snap-swatch" style="background:#ffaa00"></span>Quadrant</label>
-      <label class="snap-row"><input type="checkbox" id="snp-intersection"  checked><span class="snap-swatch" style="background:#ff44ff"></span>Intersection</label>
-      <label class="snap-row"><input type="checkbox" id="snp-perpendicular" checked><span class="snap-swatch" style="background:#00ffff"></span>Perpendicular</label>
-      <label class="snap-row"><input type="checkbox" id="snp-tangent"       checked><span class="snap-swatch" style="background:#ffff44"></span>Tangent</label>
-      <label class="snap-row"><input type="checkbox" id="snp-nearest"       checked><span class="snap-swatch" style="background:#aaaaaa"></span>Nearest</label>
-      <div id="snap-settings-footer">
-        <button onclick="setAllSnapModes(true)">All</button>
-        <button onclick="setAllSnapModes(false)">None</button>
-        <button onclick="closeSnapSettings()">Close</button>
+  <!-- Snap toolbar row -->
+  <div id="snap-toolbar-row">
+    <label>Snap</label>
+    <div style="position:relative">
+      <button id="btn-snap" class="snap-on" title="Toggle Object Snap (F3)">Snap ✓</button>
+      <div id="snap-settings">
+        <h4>Object Snap Modes</h4>
+        <label class="snap-row"><input type="checkbox" id="snp-endpoint"      checked><span class="snap-swatch" style="background:#ff4444"></span>Endpoint</label>
+        <label class="snap-row"><input type="checkbox" id="snp-midpoint"      checked><span class="snap-swatch" style="background:#44ff44"></span>Midpoint</label>
+        <label class="snap-row"><input type="checkbox" id="snp-center"        checked><span class="snap-swatch" style="background:#4488ff"></span>Center</label>
+        <label class="snap-row"><input type="checkbox" id="snp-quadrant"      checked><span class="snap-swatch" style="background:#ffaa00"></span>Quadrant</label>
+        <label class="snap-row"><input type="checkbox" id="snp-intersection"  checked><span class="snap-swatch" style="background:#ff44ff"></span>Intersection</label>
+        <label class="snap-row"><input type="checkbox" id="snp-perpendicular" checked><span class="snap-swatch" style="background:#00ffff"></span>Perpendicular</label>
+        <label class="snap-row"><input type="checkbox" id="snp-tangent"       checked><span class="snap-swatch" style="background:#ffff44"></span>Tangent</label>
+        <label class="snap-row"><input type="checkbox" id="snp-nearest"       checked><span class="snap-swatch" style="background:#aaaaaa"></span>Nearest</label>
+        <div id="snap-settings-footer">
+          <button id="btn-snap-all">All</button>
+          <button id="btn-snap-none">None</button>
+          <button id="btn-snap-close">Close</button>
+        </div>
       </div>
     </div>
+    <button id="btn-snap-settings" title="Snap settings" style="padding:2px 6px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text-dim);cursor:pointer;font-size:11px">⚙</button>
+    <div id="snap-divider"></div>
+    <span id="snap-btn-bar"></span><!-- populated by snap.js -->
   </div>
 
-  <div class="sep"></div>
-
-  <!-- Layer controls (Task #5) -->
-  <label style="color:#888;font-size:11px">Layer</label>
-  <select id="layer-sel" title="Current drawing layer"></select>
-  <button id="btn-layers" title="Layer Manager…">Layers…</button>
-  <input type="color" id="color-inp" value="#00ff00" title="Entity colour">
-  <select id="export-fmt" title="Export format">
-    <option value="r2000">DXF R2000</option>
-    <option value="r12">DXF R12</option>
-    <option value="svg">SVG</option>
-  </select>
-</div>
-
-<!-- ── Block Manager Modal (Task #7) ─────────────────────────────────────── -->
-<div id="block-modal">
-  <div id="block-panel">
-    <h3>Block Manager
-      <button id="btn-close-blocks">✕</button>
-    </h3>
-    <div id="block-list"></div>
-    <div id="block-panel-footer">
-      <button id="btn-close-blocks2">Close</button>
-    </div>
+  <!-- Coordinate input bar -->
+  <div id="coord-bar">
+    <label>Coord:</label>
+    <input id="coord-input" placeholder="x,y  or  @dx,dy  or  @dist&lt;angle" autocomplete="off" spellcheck="false">
+    <span id="coord-readout">X: 0.000   Y: 0.000</span>
+    <span class="coord-hint">Absolute, relative (@), or polar (@dist&lt;ang)</span>
   </div>
 </div>
 
-<!-- ── Symbols Modal (Task #7) ───────────────────────────────────────────── -->
-<div id="sym-modal">
-  <div id="sym-panel">
-    <h3>Insert Symbol</h3>
-    <div id="sym-list"></div>
-    <div id="sym-panel-footer">
-      <button id="btn-close-sym">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Hatch options bar (Task #7) ───────────────────────────────────────── -->
+<!-- ── Hatch options (shown when hatch tool active) ──────────────────────────── -->
 <div id="hatch-bar">
   <label>Pattern:</label>
   <select id="hatch-pattern">
@@ -250,14 +370,114 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
     <option value="DOTS">DOTS</option>
   </select>
   <label>Angle:</label>
-  <input type="number" id="hatch-angle" value="0" min="-360" max="360" step="5" style="width:50px">°
+  <input type="number" id="hatch-angle" value="0" min="-360" max="360" step="5">°
   <label>Scale:</label>
-  <input type="number" id="hatch-scale" value="5" min="0.1" max="200" step="0.5" style="width:55px">
+  <input type="number" id="hatch-scale" value="5" min="0.1" max="200" step="0.5">
 </div>
 
-<!-- ── Layer Manager Modal (Task #5) ─────────────────────────────────────── -->
-<div id="layer-modal">
-  <div id="layer-panel">
+<!-- ── Workspace ─────────────────────────────────────────────────────────────── -->
+<div id="workspace">
+
+  <!-- Left sidebar: Tools + Layers quick view -->
+  <aside id="left-panel">
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Drawing Info</span>
+        <button class="collapse-btn">▾</button>
+      </div>
+      <div class="panel-content" id="drawing-info">
+        <div style="color:var(--text-dim);font-size:11px;line-height:1.8">
+          <div>Entities: <span id="ent-count">0</span></div>
+          <div>Layers: <span id="layer-count">1</span></div>
+          <div>Zoom: <span id="zoom-display">100%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Layers</span>
+        <div class="header-actions">
+          <button style="background:none;border:none;color:#888;cursor:pointer;font-size:11px" id="btn-layers-sidebar" title="Layer Manager">⚙</button>
+          <button class="collapse-btn">▾</button>
+        </div>
+      </div>
+      <div class="panel-content" id="layers-sidebar">
+        <!-- populated dynamically -->
+        <div style="color:var(--text-dim);font-size:11px">(loading…)</div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Tool Options</span>
+        <button class="collapse-btn">▾</button>
+      </div>
+      <div class="panel-content" id="tool-options-content">
+        <div style="color:var(--text-dim);font-size:11px">Select a tool to see options.</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="vsplitter" id="vsplitter-left"></div>
+
+  <!-- Center: canvas + bottom history panel -->
+  <div id="center-col">
+    <div id="viewport">
+      <canvas id="canvas"></canvas>
+      <div id="snap-marker">
+        <svg width="20" height="20" viewBox="-10 -10 20 20" id="snap-svg"></svg>
+      </div>
+    </div>
+
+    <div class="hsplitter" id="hsplitter-bottom"></div>
+
+    <!-- Bottom panel: Command history -->
+    <div id="bottom-panel">
+      <div class="panel-header" style="cursor:default">
+        <span>Command History</span>
+        <button id="btn-toggle-bottom" class="collapse-btn" title="Toggle history panel">▾</button>
+      </div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <div class="vsplitter" id="vsplitter-right"></div>
+
+  <!-- Right sidebar: Properties + Block Library -->
+  <aside id="right-panel">
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Properties</span>
+        <button class="collapse-btn">▾</button>
+      </div>
+      <div class="panel-content" id="inspector-content" style="padding:4px 2px">
+        <div class="insp-empty">No entity selected.<br><small>Click an entity to inspect it.</small></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Block Library</span>
+        <div class="header-actions">
+          <button style="background:none;border:none;color:#888;cursor:pointer;font-size:11px" id="btn-refresh-blocks" title="Refresh">↻</button>
+          <button class="collapse-btn">▾</button>
+        </div>
+      </div>
+      <div class="panel-content" id="block-library-content">
+        <div style="color:var(--text-dim);font-size:11px">(no blocks)</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ── Command / Status bar ───────────────────────────────────────────────────── -->
+<div id="cmdbar">
+  <div id="status">Initialising…</div>
+  <input id="cmd-input" placeholder="Command  (LINE, CIRCLE, ARC, HATCH, UNDO, ZF, …)" autocomplete="off" spellcheck="false">
+  <div id="coords-display">0.000, 0.000</div>
+</div>
+
+<!-- ── Layer Manager Modal ─────────────────────────────────────────────────────── -->
+<div id="layer-modal" class="modal-overlay">
+  <div class="modal-box">
     <h3>Layer Manager
       <button id="btn-add-layer">+ New Layer</button>
     </h3>
@@ -266,7 +486,7 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
         <thead>
           <tr>
             <th>Cur</th><th>Name</th><th>Color</th><th>Line Type</th>
-            <th title="Line weight mm">LW</th>
+            <th title="Line weight">LW</th>
             <th title="Visible">Vis</th><th title="Locked">Lck</th>
             <th title="Frozen">Frz</th><th title="Print">Prt</th><th></th>
           </tr>
@@ -274,1902 +494,198 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
         <tbody id="layer-tbody"></tbody>
       </table>
     </div>
-    <div id="layer-panel-footer">
+    <div class="modal-footer">
       <button id="btn-close-layers">Close</button>
     </div>
   </div>
 </div>
 
-<!-- ── Snap marker SVG overlay (Task #5) ─────────────────────────────────── -->
-<div id="snap-marker">
-  <svg width="20" height="20" viewBox="-10 -10 20 20" id="snap-svg"></svg>
+<!-- ── Block Manager Modal ─────────────────────────────────────────────────────── -->
+<div id="block-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Block Manager
+      <button id="btn-close-blocks">✕</button>
+    </h3>
+    <div id="block-list"></div>
+    <div class="modal-footer">
+      <button id="btn-close-blocks2">Close</button>
+    </div>
+  </div>
 </div>
 
-<!-- ── Drawing canvas ─────────────────────────────────────────────────────── -->
-<div id="viewport">
-  <canvas id="canvas"></canvas>
+<!-- ── Symbols Modal ──────────────────────────────────────────────────────────── -->
+<div id="sym-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Insert Symbol</h3>
+    <div id="sym-list"></div>
+    <div class="modal-footer">
+      <button id="btn-close-sym">Close</button>
+    </div>
+  </div>
 </div>
 
-<!-- ── Status / command bar ───────────────────────────────────────────────── -->
-<div id="cmdbar">
-  <div id="status">Initialising…</div>
-  <input id="cmd-input" placeholder="Command  (LINE, NURBS, DIMRAD, UNDO, ZF, DXF, …)" autocomplete="off" spellcheck="false">
-  <div id="coords">0.00, 0.00</div>
-</div>
-
-<script>
-// ─── WASM loader ──────────────────────────────────────────────────────────────
-let wasmReady = false;
-
-async function loadWASM() {
-  const go = new Go();
-  const res = await WebAssembly.instantiateStreaming(fetch('main.wasm'), go.importObject);
-  go.run(res.instance);
-  wasmReady = true;
-  setStatus('Ready — select a tool and click to draw');
-}
-
-function installDemoStubs() {
-  // Minimal in-browser stubs so the UI works without a compiled WASM binary.
-  let nextId = 1;
-  const ents = [];
-  const mk = (obj) => { ents.push({ id: nextId++, ...obj }); return nextId - 1; };
-  window.cadAddLine        = (x1,y1,x2,y2,l,c)               => mk({type:'line',x1,y1,x2,y2,layer:l,color:c});
-  window.cadAddCircle      = (cx,cy,r,l,c)                    => mk({type:'circle',cx,cy,r,layer:l,color:c});
-  window.cadAddArc         = (cx,cy,r,s,e,l,c)                => mk({type:'arc',cx,cy,r,startDeg:s,endDeg:e,layer:l,color:c});
-  window.cadAddRectangle   = (x1,y1,x2,y2,l,c)               => mk({type:'rectangle',x1,y1,x2,y2,layer:l,color:c});
-  window.cadAddPolyline    = (pts,l,c)                        => mk({type:'polyline',points:pts,layer:l,color:c});
-  window.cadAddSpline      = (pts,l,c)                        => mk({type:'spline',points:pts,layer:l,color:c});
-  window.cadAddNURBS       = (deg,pts,kn,wt,l,c)              => mk({type:'nurbs',nurbsDeg:deg,points:pts,knots:kn,weights:wt,layer:l,color:c});
-  window.cadAddEllipse     = (cx,cy,a,b,rot,l,c)              => mk({type:'ellipse',cx,cy,r:a,r2:b,rotDeg:rot,layer:l,color:c});
-  window.cadAddText        = (x,y,t,h,rot,fn,l,c)             => mk({type:'text',x1:x,y1:y,text:t,textHeight:h,rotDeg:rot,font:fn,layer:l,color:c});
-  window.cadAddMText       = (x,y,t,h,w,rot,fn,l,c)           => mk({type:'mtext',x1:x,y1:y,text:t,textHeight:h,r2:w,rotDeg:rot,font:fn,layer:l,color:c});
-  window.cadAddLinearDim   = (x1,y1,x2,y2,off,l,c)           => mk({type:'dimlin',x1,y1,x2,y2,cx:off,layer:l,color:c});
-  window.cadAddAlignedDim  = (x1,y1,x2,y2,off,l,c)           => mk({type:'dimali',x1,y1,x2,y2,cx:off,layer:l,color:c});
-  window.cadAddAngularDim  = (cx,cy,x1,y1,x2,y2,r,l,c)       => mk({type:'dimang',cx,cy,x1,y1,x2,y2,r,layer:l,color:c});
-  window.cadAddRadialDim   = (cx,cy,r,ang,l,c)                => mk({type:'dimrad',cx,cy,r,rotDeg:ang,layer:l,color:c});
-  window.cadAddDiameterDim = (cx,cy,r,ang,l,c)                => mk({type:'dimdia',cx,cy,r,rotDeg:ang,layer:l,color:c});
-  window.cadDeleteEntity   = id => { const i=ents.findIndex(e=>e.id===id); if(i>=0){ents.splice(i,1);return true;} return false; };
-  window.cadUndo           = () => { if(ents.length>0){ents.pop();return true;} return false; };
-  window.cadRedo           = () => false;
-  window.cadClear          = () => { ents.length=0; };
-  window.cadEntities       = () => JSON.stringify(ents);
-  window.cadExportDXF      = () => '  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n  0\nEOF\n';
-  window.cadExportDXFR12   = () => window.cadExportDXF();
-  window.cadNearestEntity  = (x,y,r) => { let best=0,bestD=r||Infinity; ents.forEach(e=>{const d=Math.hypot((e.cx||e.x1||0)-x,(e.cy||e.y1||0)-y);if(d<bestD){bestD=d;best=e.id;}}); return best; };
-  // ── Edit op stubs (demo mode) ────────────────────────────────────────────────
-  window.cadMove        = (ids,dx,dy) => { ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){e.x1+=dx;e.y1+=dy;}if(e.x2!=null){e.x2+=dx;e.y2+=dy;}if(e.cx!=null){e.cx+=dx;e.cy+=dy;}if(e.points)e.points=e.points.map(p=>[p[0]+dx,p[1]+dy]);}); return true; };
-  window.cadCopy        = (ids,dx,dy) => ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){ne.x1+=dx;ne.y1+=dy;}if(ne.x2!=null){ne.x2+=dx;ne.y2+=dy;}if(ne.cx!=null){ne.cx+=dx;ne.cy+=dy;}if(ne.points)ne.points=ne.points.map(p=>[p[0]+dx,p[1]+dy]);ents.push(ne);return ne.id;});
-  window.cadRotate      = (ids,cx,cy,ang,mc) => { const r=ang*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r); const rot=(x,y)=>[cx+(x-cx)*cs-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*cs]; if(mc){return ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=rot(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=rot(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=rot(ne.cx,ne.cy);}ents.push(ne);return ne.id;});}else{ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){[e.x1,e.y1]=rot(e.x1,e.y1);}if(e.x2!=null){[e.x2,e.y2]=rot(e.x2,e.y2);}if(e.cx!=null){[e.cx,e.cy]=rot(e.cx,e.cy);}});return ids;} };
-  window.cadScale       = (ids,cx,cy,sx,sy,mc) => { const sc=(x,y)=>[cx+(x-cx)*sx,cy+(y-cy)*sy]; if(mc){return ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=sc(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=sc(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=sc(ne.cx,ne.cy);ne.r*=Math.sqrt(Math.abs(sx*sy));}ents.push(ne);return ne.id;});}else{ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){[e.x1,e.y1]=sc(e.x1,e.y1);}if(e.x2!=null){[e.x2,e.y2]=sc(e.x2,e.y2);}if(e.cx!=null){[e.cx,e.cy]=sc(e.cx,e.cy);e.r*=Math.sqrt(Math.abs(sx*sy));}});return ids;} };
-  window.cadMirror      = (ids,ax,ay,bx,by,mc) => { const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy; const mir=(x,y)=>{const t=((x-ax)*dx+(y-ay)*dy)/l2;return[2*(ax+t*dx)-x,2*(ay+t*dy)-y];}; if(mc){return ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=mir(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=mir(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=mir(ne.cx,ne.cy);}ents.push(ne);return ne.id;});}else{ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){[e.x1,e.y1]=mir(e.x1,e.y1);}if(e.x2!=null){[e.x2,e.y2]=mir(e.x2,e.y2);}if(e.cx!=null){[e.cx,e.cy]=mir(e.cx,e.cy);}});return ids;} };
-  window.cadTrim        = () => 'null';
-  window.cadExtend      = () => -1;
-  window.cadFillet      = () => -1;
-  window.cadChamfer     = () => -1;
-  window.cadArrayRect   = (ids,rows,cols,rs,cs) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){if(r===0&&c===0)continue;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){ne.x1+=c*cs;ne.y1+=r*rs;}if(ne.x2!=null){ne.x2+=c*cs;ne.y2+=r*rs;}if(ne.cx!=null){ne.cx+=c*cs;ne.cy+=r*rs;}if(ne.points)ne.points=ne.points.map(p=>[p[0]+c*cs,p[1]+r*rs]);ents.push(ne);out.push(ne.id);}}); return out; };
-  window.cadArrayPolar  = (ids,cx,cy,count,ang) => { const out=[],step=ang/count; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let i=1;i<count;i++){const r=i*step*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r);const rot=(x,y)=>[cx+(x-cx)*cs-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*cs];const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=rot(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=rot(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=rot(ne.cx,ne.cy);}if(ne.points)ne.points=ne.points.map(p=>rot(p[0],p[1]));ents.push(ne);out.push(ne.id);}}); return out; };
-  window.cadOffset      = (ids,dist) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(e.type==='line'){const dx=e.x2-e.x1,dy=e.y2-e.y1,len=Math.hypot(dx,dy)||1;const px=-dy/len*dist,py=dx/len*dist;ne.x1+=px;ne.y1+=py;ne.x2+=px;ne.y2+=py;}else if(e.type==='circle'||e.type==='arc'){ne.r=Math.max(0,(e.r||0)+dist);}else{ne.x1=(e.x1||0)+dist;ne.y1=(e.y1||0)+dist;}ents.push(ne);out.push(ne.id);}); return out; };
-  // ── Snap + Layer stubs (Task #5) ────────────────────────────────────────────
-  window.cadFindSnap        = () => '';
-  let _stubLayers = [{id:0,name:'0',color:'#ffffff',lineType:'Solid',lineWeight:0.25,visible:true,locked:false,frozen:false,printEnabled:true}];
-  let _stubCurLayer = 0; let _stubNextLayer=1;
-  window.cadGetLayers        = () => JSON.stringify(_stubLayers);
-  window.cadGetCurrentLayer  = () => _stubCurLayer;
-  window.cadSetCurrentLayer  = id => { _stubCurLayer=id; return true; };
-  window.cadAddLayer         = (name,color) => { const id=_stubNextLayer++; _stubLayers.push({id,name,color,lineType:'Solid',lineWeight:0.25,visible:true,locked:false,frozen:false,printEnabled:true}); return id; };
-  window.cadRemoveLayer      = id => { if(id===0)return false; const i=_stubLayers.findIndex(l=>l.id===id); if(i<0)return false; _stubLayers.splice(i,1); return true; };
-  window.cadSetLayerName     = (id,n)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.name=n; return !!l; };
-  window.cadSetLayerColor    = (id,c)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.color=c; return !!l; };
-  window.cadSetLayerVisible   = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.visible=v; return !!l; };
-  window.cadSetLayerLocked    = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.locked=v; return !!l; };
-  window.cadSetLayerFrozen    = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.frozen=v; return !!l; };
-  window.cadSetLayerLineType  = (id,lt) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineType=lt; return !!l; };
-  window.cadSetLayerLineWeight= (id,lw) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineWeight=lw; return !!l; };
-  window.cadSetLayerPrint     = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.printEnabled=v; return !!l; };
-  // ── Task #7 stubs ────────────────────────────────────────────────────────────
-  const _stubBlocks = {};
-  window.cadDefineBlock    = (name,bx,by,idsJson) => { _stubBlocks[name]={name,baseX:bx,baseY:by,count:JSON.parse(idsJson||'[]').length}; return true; };
-  window.cadInsertBlock    = (name,x,y,sx,sy,rot,l,c) => { if(!_stubBlocks[name])return -1; return mk({type:'blockref',x1:x,y1:y,text:name,r:sx,r2:sy,rotDeg:rot,layer:l,color:c}); };
-  window.cadExplodeBlock   = (id) => { const e=ents.find(e=>e.id===id); if(!e||e.type!=='blockref')return null; ents.splice(ents.findIndex(e2=>e2.id===id),1); return [mk({...e,type:'line',x2:e.x1+10,y2:e.y1})]; };
-  window.cadGetBlocks      = () => JSON.stringify(Object.values(_stubBlocks));
-  window.cadAddHatch       = (pts,pat,ang,sc,l,c) => mk({type:'hatch',points:pts,text:pat,rotDeg:ang,r:sc,layer:l,color:c});
-  window.cadRenderHatch    = (id) => '[]';
-  window.cadAddLeader      = (pts,text,l,c) => mk({type:'leader',points:pts,text,layer:l,color:c});
-  window.cadAddRevisionCloud=(pts,arcLen,l,c)=> mk({type:'revcloud',points:pts,r:arcLen,layer:l,color:c});
-  window.cadAddWipeout     = (pts,l,c)        => mk({type:'wipeout',points:pts,layer:l,color:c});
-  window.cadGetSymbols     = () => JSON.stringify(['CENTER_MARK','NORTH_ARROW','REVISION_TRIANGLE','DATUM_TRIANGLE','SURFACE_FINISH']);
-  window.cadInsertSymbol   = (name,x,y,sc,rot,l,c) => {
-    window.cadDefineBlock(name,0,0,'[]');
-    return window.cadInsertBlock(name,x,y,sc,sc,rot,l,c);
-  };
-
-  // ── Task #6 stubs ────────────────────────────────────────────────────────────
-  window.cadLoadDXF = (dxfStr) => {
-    try {
-      const lines=dxfStr.split('\n');
-      let cnt=0;
-      for(let i=0;i<lines.length;i++){
-        if(lines[i].trim()==='0'&&i+1<lines.length){
-          const t=lines[i+1].trim().toUpperCase();
-          if(['LINE','CIRCLE','ARC','LWPOLYLINE','POLYLINE','SPLINE','ELLIPSE','TEXT','MTEXT'].includes(t)) cnt++;
-        }
-      }
-      return JSON.stringify({ok:true,count:cnt,warnings:[]});
-    } catch(e) {
-      return JSON.stringify({ok:false,error:e.message});
-    }
-  };
-  window.cadExportSVG = () => {
-    const w=800,h=600;
-    let paths='';
-    ents.forEach(e=>{
-      if(e.type==='line') paths+=`<line x1="${e.x1||0}" y1="${e.y1||0}" x2="${e.x2||0}" y2="${e.y2||0}" stroke="${e.color||'white'}" stroke-width="1"/>`;
-      else if(e.type==='circle') paths+=`<circle cx="${e.cx||0}" cy="${e.cy||0}" r="${e.r||0}" fill="none" stroke="${e.color||'white'}" stroke-width="1"/>`;
-    });
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${paths}</svg>`;
-  };
-  wasmReady = true;
-}
-
-// ─── Canvas / viewport ────────────────────────────────────────────────────────
-const canvas = document.getElementById('canvas');
-const ctx    = canvas.getContext('2d');
-let panX=0, panY=0, zoom=1;
-let isPanning=false, panStart={x:0,y:0};
-
-function resize() {
-  const vp = document.getElementById('viewport');
-  canvas.width = vp.clientWidth;
-  canvas.height = vp.clientHeight;
-  render();
-}
-window.addEventListener('resize', resize);
-
-function w2s(wx,wy){ return [wx*zoom+panX+canvas.width/2, -wy*zoom+panY+canvas.height/2]; }
-function s2w(sx,sy){ return [(sx-canvas.width/2-panX)/zoom, -(sy-canvas.height/2-panY)/zoom]; }
-
-// ─── Tool state ───────────────────────────────────────────────────────────────
-let currentTool = 'line';
-let clicks = [];
-let tempPt  = null;
-let selectedId = 0;
-let currentLayer = 0;
-let currentColor = '#00ff00';
-let pendingText  = null;  // set by command bar for text/mtext tools
-let editPickIds  = [];    // multi-entity pick buffer for edit ops (trim/extend/fillet/chamfer/mirror)
-
-// ─── Locked-layer guard (Task #5) ────────────────────────────────────────────
-// Returns true if the entity's layer is locked (selection/edit/delete blocked).
-function isOnLockedLayer(entityId){
-  if(!wasmReady||!window._lockedLayers) return false;
-  const entities=JSON.parse(window.cadEntities()||'[]');
-  const e=entities.find(e=>e.id===entityId);
-  if(!e) return false;
-  return window._lockedLayers.has(e.layer||0);
-}
-
-// Wrap selection so picking an entity on a locked layer shows a warning instead.
-function trySelect(id){
-  if(!id) return 0;
-  if(isOnLockedLayer(id)){
-    setStatus(`Layer locked — cannot select entity ${id}.`);
-    return 0;
-  }
-  return id;
-}
-
-// Wrap deletion so locked-layer entities cannot be deleted.
-function tryDelete(id){
-  if(!id||!wasmReady) return;
-  if(isOnLockedLayer(id)){
-    setStatus(`Layer locked — cannot delete entity ${id}.`);
-    return;
-  }
-  window.cadDeleteEntity(id);
-}
-
-// ─── Snap state (Task #5) ─────────────────────────────────────────────────────
-let snapEnabled = true;
-let snapResult  = null;  // current SnapCandidate {x,y,type,entityID} or null
-const SNAP_RADIUS_PX = 15; // screen pixels — converted to world units on each query
-
-const snapColors = {
-  Endpoint:'#ff4444', Midpoint:'#44ff44', Center:'#4488ff',
-  Quadrant:'#ffaa00', Intersection:'#ff44ff', Perpendicular:'#00ffff',
-  Tangent:'#ffff44', Nearest:'#aaaaaa',
-};
-
-// ─── Snap mode bitmask (Task #5) ─────────────────────────────────────────────
-const SNAP_BITS = {
-  'snp-endpoint':1,'snp-midpoint':2,'snp-center':4,'snp-quadrant':8,
-  'snp-intersection':16,'snp-perpendicular':32,'snp-tangent':64,'snp-nearest':128,
-};
-
-function loadSnapSettings(){
-  try {
-    const saved = localStorage.getItem('gocad-snap');
-    if(saved){
-      const s=JSON.parse(saved);
-      snapEnabled = s.enabled!==false;
-      Object.entries(SNAP_BITS).forEach(([id])=>{
-        const el=document.getElementById(id);
-        if(el&&id in s) el.checked=s[id];
-      });
-    }
-  } catch(_){}
-}
-
-function saveSnapSettings(){
-  const s={enabled:snapEnabled};
-  Object.entries(SNAP_BITS).forEach(([id])=>{
-    const el=document.getElementById(id);
-    if(el) s[id]=el.checked;
-  });
-  try{ localStorage.setItem('gocad-snap',JSON.stringify(s)); } catch(_){}
-}
-
-function snapMask(){
-  let mask=0;
-  Object.entries(SNAP_BITS).forEach(([id,bit])=>{
-    const el=document.getElementById(id);
-    if(el&&el.checked) mask|=bit;
-  });
-  return mask;
-}
-
-function setAllSnapModes(on){
-  Object.keys(SNAP_BITS).forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.checked=on;
-  });
-  saveSnapSettings();
-}
-
-function closeSnapSettings(){
-  document.getElementById('snap-settings').classList.remove('open');
-  saveSnapSettings();
-}
-
-function updateSnapBtn(){
-  const b=document.getElementById('btn-snap');
-  if(snapEnabled){b.className='snap-on';b.textContent='Snap ✓';}
-  else{b.className='';b.textContent='Snap ✗';}
-}
-
-function snapWorldPt(wx, wy){
-  if(!snapEnabled||!wasmReady) return [wx,wy];
-  const mask = snapMask(); // 0 means all modes disabled → no snap
-  if(mask===0){ snapResult=null; return [wx,wy]; }
-  const worldRadius = SNAP_RADIUS_PX / zoom;
-  const raw = window.cadFindSnap(wx, wy, worldRadius, mask);
-  if(!raw) { snapResult=null; return [wx,wy]; }
-  snapResult = JSON.parse(raw);
-  return [snapResult.x, snapResult.y];
-}
-
-function drawSnapMarker(){
-  const marker = document.getElementById('snap-marker');
-  const svg    = document.getElementById('snap-svg');
-  if(!snapResult||!snapEnabled){marker.style.display='none';return;}
-  const [sx,sy] = w2s(snapResult.x, snapResult.y);
-  const col = snapColors[snapResult.type] || '#ffffff';
-  marker.style.display = 'block';
-  marker.style.left = (sx-10)+'px';
-  marker.style.top  = (sy-10)+'px';
-  // Draw shape based on snap type
-  let shape = '';
-  switch(snapResult.type){
-    case 'Endpoint':
-      shape=`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${col}" stroke-width="1.5"/>`;
-      break;
-    case 'Midpoint':
-      shape=`<polygon points="0,-7 7,5 -7,5" fill="none" stroke="${col}" stroke-width="1.5"/>`;
-      break;
-    case 'Center':
-      shape=`<circle r="6" fill="none" stroke="${col}" stroke-width="1.5"/>
-             <line x1="-4" y1="0" x2="4" y2="0" stroke="${col}" stroke-width="1"/>
-             <line x1="0" y1="-4" x2="0" y2="4" stroke="${col}" stroke-width="1"/>`;
-      break;
-    case 'Quadrant':
-      shape=`<polygon points="0,-7 7,0 0,7 -7,0" fill="none" stroke="${col}" stroke-width="1.5"/>`;
-      break;
-    case 'Intersection':
-      shape=`<line x1="-7" y1="-7" x2="7" y2="7" stroke="${col}" stroke-width="1.5"/>
-             <line x1="7" y1="-7" x2="-7" y2="7" stroke="${col}" stroke-width="1.5"/>`;
-      break;
-    case 'Perpendicular':
-      shape=`<line x1="-7" y1="7" x2="-7" y2="-4" stroke="${col}" stroke-width="1.5"/>
-             <line x1="-7" y1="-4" x2="5" y2="-4" stroke="${col}" stroke-width="1.5"/>
-             <line x1="-7" y1="0" x2="-3" y2="0" stroke="${col}" stroke-width="1"/>
-             <line x1="-3" y1="0" x2="-3" y2="-4" stroke="${col}" stroke-width="1"/>`;
-      break;
-    case 'Tangent':
-      shape=`<circle r="6" fill="none" stroke="${col}" stroke-width="1.5"/>
-             <line x1="-7" y1="0" x2="7" y2="0" stroke="${col}" stroke-width="1.5"/>`;
-      break;
-    default:
-      shape=`<circle r="4" fill="${col}" opacity="0.5"/>`;
-  }
-  svg.innerHTML=shape;
-}
-
-// ─── Layer UI (Task #5) ───────────────────────────────────────────────────────
-
-function refreshLayerSel(){
-  const sel = document.getElementById('layer-sel');
-  const cur = wasmReady ? window.cadGetCurrentLayer() : 0;
-  if(wasmReady){
-    const layers = JSON.parse(window.cadGetLayers()||'[]');
-    sel.innerHTML = layers.map(l=>
-      `<option value="${l.id}"${l.id===cur?' selected':''}>${l.name}</option>`
-    ).join('');
-    currentLayer = cur;
-  } else {
-    if(!sel.options.length) sel.innerHTML='<option value="0">0</option>';
-  }
-}
-
-function openLayerManager(){
-  refreshLayerTable();
-  document.getElementById('layer-modal').classList.add('open');
-}
-function closeLayerManager(){
-  document.getElementById('layer-modal').classList.remove('open');
-  refreshLayerSel();
-}
-
-const LT_OPTIONS = ['Solid','Dashed','Dotted','DashDot','Center','Hidden'];
-const LW_OPTIONS = [0.00,0.05,0.09,0.13,0.15,0.18,0.20,0.25,0.30,0.35,0.40,0.50,0.53,0.60,0.70,0.80,0.90,1.00,1.06,1.20,1.40,1.58,2.00,2.11];
-
-function refreshLayerTable(){
-  if(!wasmReady) return;
-  const layers = JSON.parse(window.cadGetLayers()||'[]');
-  const cur = window.cadGetCurrentLayer();
-  const tbody = document.getElementById('layer-tbody');
-  tbody.innerHTML = layers.map(l=>`
-    <tr>
-      <td style="text-align:center">
-        <input type="radio" name="cur-layer" class="layer-check"
-          ${l.id===cur?'checked':''}
-          onchange="if(wasmReady)window.cadSetCurrentLayer(${l.id});currentLayer=${l.id};refreshLayerSel()">
-      </td>
-      <td><input type="text" value="${escH(l.name)}" style="width:90px"
-          onblur="if(wasmReady)window.cadSetLayerName(${l.id},this.value)"></td>
-      <td><input type="color" value="${l.color}"
-          oninput="if(wasmReady)window.cadSetLayerColor(${l.id},this.value);render()"></td>
-      <td>
-        <select class="layer-check" style="background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:11px"
-          onchange="if(wasmReady)window.cadSetLayerLineType(${l.id},this.value);render()">
-          ${LT_OPTIONS.map(t=>`<option${t===l.lineType?' selected':''}>${t}</option>`).join('')}
+<!-- ── Drafting Settings Dialog ───────────────────────────────────────────────── -->
+<div id="drafting-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Drafting Settings
+      <button id="btn-close-drafting">✕</button>
+    </h3>
+    <div class="ds-form">
+      <div class="ds-section">Grid</div>
+      <div class="ds-row">
+        <label>Grid X spacing</label>
+        <input type="number" id="ds-grid-x" value="10" min="0.1" step="0.1">
+      </div>
+      <div class="ds-row">
+        <label>Grid Y spacing</label>
+        <input type="number" id="ds-grid-y" value="10" min="0.1" step="0.1">
+      </div>
+      <div class="ds-row">
+        <label>Show Grid</label>
+        <input type="checkbox" id="ds-grid-on" checked>
+      </div>
+      <div class="ds-section">Units</div>
+      <div class="ds-row">
+        <label>Units</label>
+        <select id="ds-unit-sel">
+          <option value="mm">Millimetres (mm)</option>
+          <option value="cm">Centimetres (cm)</option>
+          <option value="m">Metres (m)</option>
+          <option value="in">Inches (in)</option>
+          <option value="ft">Feet (ft)</option>
         </select>
-      </td>
-      <td>
-        <select class="layer-check" style="background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:11px;width:52px"
-          onchange="if(wasmReady)window.cadSetLayerLineWeight(${l.id},parseFloat(this.value))">
-          ${LW_OPTIONS.map(w=>`<option value="${w}"${Math.abs(w-l.lineWeight)<0.005?' selected':''}>${w.toFixed(2)}</option>`).join('')}
+      </div>
+      <div class="ds-row">
+        <label>Precision (decimal places)</label>
+        <input type="number" id="ds-precision" value="4" min="0" max="8" step="1">
+      </div>
+      <div class="ds-section">Entity Defaults</div>
+      <div class="ds-row">
+        <label>Default Color</label>
+        <input type="color" id="ds-def-color" value="#00ff00">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-close-drafting">Cancel</button>
+      <button id="btn-apply-drafting" class="primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Print / Plot Dialog ────────────────────────────────────────────────────── -->
+<div id="print-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Print / Plot
+      <button id="btn-close-print">✕</button>
+    </h3>
+    <div class="print-form">
+      <div class="print-row">
+        <label>Output format</label>
+        <select id="print-fmt">
+          <option value="pdf">PDF (browser print)</option>
+          <option value="png">PNG (canvas snapshot)</option>
         </select>
-      </td>
-      <td style="text-align:center">
-        <input type="checkbox" class="layer-check" ${l.visible?'checked':''}
-          onchange="if(wasmReady)window.cadSetLayerVisible(${l.id},this.checked);render()"></td>
-      <td style="text-align:center">
-        <input type="checkbox" class="layer-check" ${l.locked?'checked':''}
-          onchange="if(wasmReady)window.cadSetLayerLocked(${l.id},this.checked)"></td>
-      <td style="text-align:center">
-        <input type="checkbox" class="layer-check" ${l.frozen?'checked':''}
-          onchange="if(wasmReady)window.cadSetLayerFrozen(${l.id},this.checked);render()"></td>
-      <td style="text-align:center">
-        <input type="checkbox" class="layer-check" ${l.printEnabled?'checked':''}
-          onchange="if(wasmReady)window.cadSetLayerPrint(${l.id},this.checked)"></td>
-      <td>${l.id!==0?`<button class="layer-btn layer-del"
-          onclick="if(wasmReady)window.cadRemoveLayer(${l.id});refreshLayerTable();refreshLayerSel();render()">✕</button>`:'—'}</td>
-    </tr>
-  `).join('');
-}
+      </div>
+      <div class="print-row">
+        <label>Paper size</label>
+        <select id="print-paper">
+          <option>A4 (210×297mm)</option>
+          <option>A3 (297×420mm)</option>
+          <option>Letter (8.5×11in)</option>
+          <option>Tabloid (11×17in)</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label>Orientation</label>
+        <select id="print-orient">
+          <option>Landscape</option>
+          <option>Portrait</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label>Scale</label>
+        <select id="print-scale">
+          <option value="fit">Fit to page</option>
+          <option value="1:1">1:1</option>
+          <option value="1:2">1:2</option>
+          <option value="1:5">1:5</option>
+          <option value="1:10">1:10</option>
+          <option value="1:50">1:50</option>
+          <option value="1:100">1:100</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-close-print">Cancel</button>
+      <button id="btn-execute-print" class="primary">Print / Export</button>
+    </div>
+  </div>
+</div>
 
-function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+<!-- ── App entry point ────────────────────────────────────────────────────────── -->
+<script type="module" src="js/app.js"></script>
 
-const toolClicks = {
-  line:2, circle:2, arc:3, rect:2,
-  poly:-1, spline:-1, nurbs:-1,
-  ellipse:3,
-  text:1, mtext:1,
-  dimlin:3, dimali:3, dimang:4, dimrad:2, dimdia:2,
-  // Edit ops — click-driven (varies; see handleEditClick below)
-  move:-99, copy:-99, rotate:-99, scale:-99,
-  mirror:2,      // 2 pts on mirror axis
-  trim:2,        // click cutter entity, click on part to remove
-  extend:2,      // click boundary entity, click near end to extend
-  fillet:-99, chamfer:-99,
-  arrayrect:-99, arraypolar:-99,
-  offset:-99,    // select entity, type OFFSET dist in command bar
-  // Task #7 tools
-  hatch:-1,      // polygon click-points, Enter to finish
-  leader:-1,     // polyline click-points, Enter to finish
-  revcloud:-1,   // polygon click-points, Enter to finish
-  wipeout:-1,    // polygon click-points, Enter to finish
-};
+<!-- ── Live status updates for the drawing info sidebar ──────────────────────── -->
+<script type="module">
+import { state } from './js/state.js';
+import { render } from './js/canvas.js';
+import { openLayerManager } from './js/dialogs.js';
 
-const toolHints = {
-  line:    'Click start, then end point.',
-  circle:  'Click centre, then radius point.',
-  arc:     'Click centre, start-angle point, end-angle point.',
-  rect:    'Click two opposite corners.',
-  poly:    'Click vertices. Enter / double-click to finish.',
-  spline:  'Click control points (≥4). Enter / right-click to finish.',
-  nurbs:   'Click control points (≥4). Enter / right-click to finish. Auto-generates clamped uniform knots.',
-  ellipse: 'Click centre, semi-major tip, semi-minor tip.',
-  text:    'Click insertion point, then type text in command bar + Enter.',
-  mtext:   'Click insertion point, then type text in command bar + Enter. Use \\n for line breaks.',
-  dimlin:  'Click first point, second point, dimension offset click.',
-  dimali:  'Click first point, second point, offset click.',
-  dimang:  'Click vertex, first ray point, second ray point, arc-radius click.',
-  dimrad:  'Click centre, circumference point.',
-  dimdia:  'Click centre, circumference point.',
-  // ── Edit ops ────────────────────────────────────────────────────────────────
-  move:       'Select entity, then type: MOVE dx dy  (e.g. MOVE 10 5)',
-  copy:       'Select entity, then type: COPY dx dy  (e.g. COPY 10 0)',
-  rotate:     'Select entity, then type: ROTATE angle [cx cy]  or ROTATECOPY angle [cx cy] to keep original',
-  scale:      'Select entity, then type: SCALE factor [cx cy]  or SCALECOPY factor to keep original',
-  mirror:     'Click two pts on mirror axis to mirror in-place.  Type MIRRORCOPY first to keep the original.',
-  trim:       'Click the cutting entity, then click the part of the target to remove.',
-  extend:     'Click the boundary entity, then click near the end of the entity to extend.',
-  fillet:     'Select first line, then type: FILLET radius  (e.g. FILLET 5) — then click second line.',
-  chamfer:    'Select first line, then type: CHAMFER d1 d2  (e.g. CHAMFER 3 3) — then click second line.',
-  arrayrect:  'Select entity, then type: ARRAYRECT rows cols rowSpacing colSpacing',
-  arraypolar: 'Select entity, then type: ARRAYPOLAR count totalAngleDeg [cx cy]',
-  offset:     'Select entity, then type: OFFSET dist  (positive = outward/left; negative = inward/right)',
-  // ── Task #7 ─────────────────────────────────────────────────────────────────
-  hatch:    'Click polygon boundary vertices. Enter / right-click to finish & fill. Choose pattern/angle/scale above.',
-  leader:   'Click arrow-tip first, then elbow/label points. Enter / right-click to finish. Type label in command bar.',
-  revcloud: 'Click polygon vertices for revision cloud boundary. Enter / right-click to finish.',
-  wipeout:  'Click polygon vertices for wipeout mask. Enter / right-click to finish.',
-};
-
-function setTool(name){
-  currentTool=name; clicks=[]; tempPt=null; pendingText=null; editPickIds=[];
-  document.querySelectorAll('#toolbar button[id^="tool-"]').forEach(b=>{
-    b.classList.toggle('active', b.id==='tool-'+name);
-  });
-  // Show hatch options bar only for the hatch tool (Task #7)
-  const hatchBar=document.getElementById('hatch-bar');
-  if(hatchBar) hatchBar.classList.toggle('open', name==='hatch');
-  setStatus(toolHints[name]||name);
-}
-
-function dist(a,b){ return Math.hypot(b[0]-a[0],b[1]-a[1]); }
-
-function commitEntity(){
-  const c=clicks, layer=currentLayer, color=currentColor;
-  switch(currentTool){
-    case 'line':    window.cadAddLine(c[0][0],c[0][1],c[1][0],c[1][1],layer,color); break;
-    case 'circle':  window.cadAddCircle(c[0][0],c[0][1],dist(c[0],c[1]),layer,color); break;
-    case 'arc': {
-      const r=dist(c[0],c[1]);
-      const a1=Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
-      const a2=Math.atan2(c[2][1]-c[0][1],c[2][0]-c[0][0])*180/Math.PI;
-      window.cadAddArc(c[0][0],c[0][1],r,a1,a2,layer,color); break;
-    }
-    case 'rect':    window.cadAddRectangle(c[0][0],c[0][1],c[1][0],c[1][1],layer,color); break;
-    case 'poly':    if(c.length>=2) window.cadAddPolyline(c.map(p=>p.slice()),layer,color); break;
-    case 'spline':  if(c.length>=4) window.cadAddSpline(c.map(p=>p.slice()),layer,color); break;
-    case 'nurbs':   if(c.length>=4) window.cadAddNURBS(3,c.map(p=>p.slice()),null,null,layer,color); break;
-    case 'ellipse':{
-      const a=dist(c[0],c[1]);
-      const b=dist(c[0],c[2]);
-      const rot=Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
-      window.cadAddEllipse(c[0][0],c[0][1],a,b,rot,layer,color); break;
-    }
-    case 'text':
-      if(!pendingText){pendingText=null;return;}
-      window.cadAddText(c[0][0],c[0][1],pendingText,2.5,0,'Standard',layer,color);
-      pendingText=null; break;
-    case 'mtext':
-      if(!pendingText){pendingText=null;return;}
-      // Replace JS \n escape sequences with actual newlines if user typed them literally
-      const content=pendingText.replace(/\\n/g,'\n');
-      window.cadAddMText(c[0][0],c[0][1],content,3.0,100,0,'Standard',layer,color);
-      pendingText=null; break;
-    case 'dimlin':{
-      const off=c[2][1]-((c[0][1]+c[1][1])/2);
-      window.cadAddLinearDim(c[0][0],c[0][1],c[1][0],c[1][1],off,layer,color); break;
-    }
-    case 'dimali':{
-      // Signed perpendicular distance from third click to the baseline segment.
-      const bx=c[1][0]-c[0][0], by=c[1][1]-c[0][1];
-      const bLen=Math.hypot(bx,by)||1;
-      // Perpendicular unit vector (baseline rotated 90° CCW).
-      const px=-by/bLen, py=bx/bLen;
-      const off=(c[2][0]-c[0][0])*px+(c[2][1]-c[0][1])*py;
-      window.cadAddAlignedDim(c[0][0],c[0][1],c[1][0],c[1][1],off,layer,color); break;
-    }
-    case 'dimang':{
-      const r=dist(c[0],c[3]);
-      window.cadAddAngularDim(c[0][0],c[0][1],c[1][0],c[1][1],c[2][0],c[2][1],r,layer,color); break;
-    }
-    case 'dimrad':{
-      const ang=Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
-      window.cadAddRadialDim(c[0][0],c[0][1],dist(c[0],c[1]),ang,layer,color); break;
-    }
-    case 'dimdia':{
-      const ang=Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
-      window.cadAddDiameterDim(c[0][0],c[0][1],dist(c[0],c[1]),ang,layer,color); break;
-    }
-    // ── Task #7 ───────────────────────────────────────────────────────────────
-    case 'hatch':
-      if(c.length>=3&&wasmReady){
-        const pat  = (document.getElementById('hatch-pattern')||{value:'ANSI31'}).value;
-        const ang  = parseFloat((document.getElementById('hatch-angle')||{value:'0'}).value)||0;
-        const sc   = parseFloat((document.getElementById('hatch-scale')||{value:'5'}).value)||5;
-        window.cadAddHatch(c.map(p=>p.slice()),pat,ang,sc,layer,color);
-      } break;
-    case 'leader':
-      if(c.length>=2&&wasmReady){
-        const label=pendingText||'';
-        window.cadAddLeader(c.map(p=>p.slice()),label,layer,color);
-        pendingText=null;
-      } break;
-    case 'revcloud':
-      if(c.length>=3&&wasmReady)
-        window.cadAddRevisionCloud(c.map(p=>p.slice()),10,layer,color); break;
-    case 'wipeout':
-      if(c.length>=3&&wasmReady)
-        window.cadAddWipeout(c.map(p=>p.slice()),layer,color); break;
-  }
-  clicks=[];
-  render();
-}
-
-// ─── Mouse events ─────────────────────────────────────────────────────────────
-canvas.addEventListener('mousedown', e=>{
-  if(e.button===1||(e.button===0&&e.altKey)){
-    isPanning=true; panStart={x:e.clientX-panX,y:e.clientY-panY};
-    canvas.style.cursor='grabbing'; return;
-  }
-  if(e.button===2){
-    if(['poly','spline','nurbs','hatch','leader','revcloud','wipeout'].includes(currentTool)) commitEntity();
-    return;
-  }
-  if(!wasmReady) return;
-  const rect=canvas.getBoundingClientRect();
-  let [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
-  // Apply snap (Task #5) — snap overrides raw cursor position
-  [wx,wy]=snapWorldPt(wx,wy);
-  if((currentTool==='text'||currentTool==='mtext')&&clicks.length===0){
-    clicks.push([wx,wy]);
-    setStatus('Type your text in the command bar and press Enter.');
-    return;
-  }
-
-  // ── Edit tools with special click workflows ──────────────────────────────
-  if(currentTool==='mirror'){
-    clicks.push([wx,wy]);
-    if(clicks.length>=2){
-      if(wasmReady&&selectedId){
-        // editPickIds[0]==='copy' means mirror-copy mode (keep original)
-        const makeCopy = editPickIds[0]==='copy';
-        const newIDs=JSON.parse(window.cadMirror([selectedId],
-          clicks[0][0],clicks[0][1],clicks[1][0],clicks[1][1],makeCopy)||'[]');
-        if(makeCopy && newIDs.length>0) selectedId=newIDs[0];
-        setStatus(makeCopy?'Mirror-Copy applied.':'Mirror applied.');
-      } else setStatus('Mirror: no entity selected.');
-      editPickIds=[]; clicks=[];
-    } else {
-      setStatus('Mirror: click second point on the mirror axis.');
-    }
-    render(); return;
-  }
-  if(currentTool==='trim'){
-    if(editPickIds.length===0){
-      const cutterID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
-      if(cutterID){
-        editPickIds=[cutterID]; selectedId=cutterID;
-        setStatus(`Trim: cutter selected (ID ${cutterID}). Click the part to remove.`);
-      } else setStatus('Trim: no entity near click — try again.');
-    } else {
-      const cutter=editPickIds[0];
-      const targetID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
-      if(targetID&&targetID!==cutter){
-        const res=JSON.parse(window.cadTrim(cutter,targetID,wx,wy)||'null');
-        setStatus(res?`Trim OK (${res.length} piece(s) kept).`:'Trim: no intersection found.');
-        editPickIds=[];
-      } else setStatus('Trim: click a different entity to trim.');
-    }
-    render(); return;
-  }
-  if(currentTool==='extend'){
-    if(editPickIds.length===0){
-      const boundID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
-      if(boundID){
-        editPickIds=[boundID]; selectedId=boundID;
-        setStatus(`Extend: boundary selected (ID ${boundID}). Click near the end to extend.`);
-      } else setStatus('Extend: no entity near click — try again.');
-    } else {
-      const bound=editPickIds[0];
-      const targetID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
-      if(targetID&&targetID!==bound){
-        const newID=window.cadExtend(bound,targetID,wx,wy);
-        setStatus(newID>=0?`Extend OK (entity ${newID}).`:'Extend: no intersection found.');
-        editPickIds=[];
-      } else setStatus('Extend: click a different entity to extend.');
-    }
-    render(); return;
-  }
-  if(currentTool==='fillet'&&editPickIds.length>=2){
-    // editPickIds = [firstLineID, radius]
-    const secondID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
-    if(secondID&&secondID!==editPickIds[0]){
-      const arcID=window.cadFillet(editPickIds[0],secondID,editPickIds[1]||5);
-      setStatus(arcID>=0?`Fillet OK (arc ID ${arcID}).`:'Fillet: failed — lines must intersect/be close.');
-    } else setStatus('Fillet: click a different line entity.');
-    editPickIds=[]; setTool('line'); render(); return;
-  }
-  if(currentTool==='chamfer'&&editPickIds.length>=3){
-    // editPickIds = [firstLineID, d1, d2]
-    const secondID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
-    if(secondID&&secondID!==editPickIds[0]){
-      const lineID=window.cadChamfer(editPickIds[0],secondID,editPickIds[1],editPickIds[2]);
-      setStatus(lineID>=0?`Chamfer OK (line ID ${lineID}).`:'Chamfer: failed — lines must intersect/be close.');
-    } else setStatus('Chamfer: click a different line entity.');
-    editPickIds=[]; setTool('line'); render(); return;
-  }
-  // ── Suppress clicks for command-bar-only edit tools ─────────────────────
-  if([-99].includes(toolClicks[currentTool])){
-    render(); return;
-  }
-
-  clicks.push([wx,wy]);
-  const req=toolClicks[currentTool];
-  if(req>0&&clicks.length>=req) commitEntity();
-  render();
-});
-
-canvas.addEventListener('dblclick', e=>{
-  if(['poly','spline','nurbs','hatch','leader','revcloud','wipeout'].includes(currentTool)){
-    if(clicks.length>0) clicks.pop();
-    commitEntity();
-  }
-});
-
-canvas.addEventListener('mousemove', e=>{
-  if(isPanning){
-    panX=e.clientX-panStart.x; panY=e.clientY-panStart.y; render(); return;
-  }
-  const rect=canvas.getBoundingClientRect();
-  let [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
-  // Run snap engine (Task #5) — updates snapResult used by drawSnapMarker
-  [wx,wy]=snapWorldPt(wx,wy);
-  tempPt=[wx,wy];
-  const dispX=snapResult?snapResult.x:wx, dispY=snapResult?snapResult.y:wy;
-  document.getElementById('coords').textContent=`${dispX.toFixed(2)}, ${dispY.toFixed(2)}`;
-  // Show active snap mode in status bar (Task #5)
-  if(snapResult&&snapEnabled){
-    const col=snapColors[snapResult.type]||'#fff';
-    document.getElementById('status').innerHTML=
-      `<span style="color:${col};font-weight:600">${snapResult.type}</span> snap — click to use`;
-  }
-  drawSnapMarker();
-  if(clicks.length>0) render();
-});
-
-canvas.addEventListener('mouseup',()=>{
-  if(isPanning){isPanning=false;canvas.style.cursor='crosshair';}
-});
-
-canvas.addEventListener('wheel', e=>{
-  e.preventDefault();
-  const f=e.deltaY<0?1.15:1/1.15;
-  const rect=canvas.getBoundingClientRect();
-  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
-  panX=mx-f*(mx-panX); panY=my-f*(my-panY); zoom*=f; render();
-},{passive:false});
-
-canvas.addEventListener('contextmenu',e=>e.preventDefault());
-
-// ─── Command bar ──────────────────────────────────────────────────────────────
-const cmdInput=document.getElementById('cmd-input');
-cmdInput.addEventListener('keydown', e=>{
-  if(e.key!=='Enter') return;
-  const raw=cmdInput.value.trim(); cmdInput.value='';
-  if((currentTool==='text'||currentTool==='mtext')&&clicks.length===1&&pendingText===null){
-    pendingText=raw||'Text'; commitEntity(); return;
-  }
-  const cmd=raw.toUpperCase();
-  const toolMap={
-    LINE:'line',L:'line',
-    CIRCLE:'circle',C:'circle',
-    ARC:'arc',A:'arc',
-    RECT:'rect',RECTANGLE:'rect',R:'rect',
-    POLY:'poly',POLYLINE:'poly',P:'poly',
-    SPLINE:'spline',SP:'spline',S:'spline',
-    NURBS:'nurbs',N:'nurbs',
-    ELLIPSE:'ellipse',EL:'ellipse',E:'ellipse',
-    TEXT:'text',T:'text',
-    MTEXT:'mtext',MT:'mtext',
-    DIMLIN:'dimlin',DIMALI:'dimali',DIMANG:'dimang',DIMRAD:'dimrad',DIMDIA:'dimdia',
-    UNDO:'undo',U:'undo',REDO:'redo',
-    DELETE:'delete',DEL:'delete',ERASE:'delete',
-    CLEAR:'clear',
-    ZOOMFIT:'zoomfit',ZF:'zoomfit',Z:'zoomfit',
-    EXPORT:'export',DXF:'export',
-    // ── Edit ops (Task #4) ────────────────────────────────────────────────────
-    MOVE:'move',M:'move',
-    COPY:'copy',CP:'copy',CO:'copy',
-    ROTATE:'rotate',RO:'rotate',
-    SCALE:'scale',SC:'scale',
-    MIRROR:'mirror',MI:'mirror',
-    TRIM:'trim',TR:'trim',
-    EXTEND:'extend',EX:'extend',
-    FILLET:'fillet',F:'fillet',
-    CHAMFER:'chamfer',CHA:'chamfer',
-    ARRAYRECT:'arrayrect',AR:'arrayrect',
-    ARRAYPOLAR:'arraypolar',AP:'arraypolar',
-    OFFSET:'offset',O:'offset',
-    // ── Task #7 ───────────────────────────────────────────────────────────────
-    HATCH:'hatch',H:'hatch',
-    LEADER:'leader',LD:'leader',
-    REVCLOUD:'revcloud',RC:'revcloud',
-    WIPEOUT:'wipeout',WP:'wipeout',
-  };
-
-  // Declare parts/rawVerb early so Task #7 and edit-op blocks can both use them.
-  const parts = raw.trim().split(/\s+/);
-  const rawVerb = parts[0].toUpperCase();
-
-  // ── Task #7 command: DEFINEBLOCK name [bx by] ────────────────────────────
-  // Select entities first (selectedId picks a single entity), then type
-  // DEFINEBLOCK name  — the selected entity plus any others at the same
-  // position are captured. Simple single-entity form: DEFINEBLOCK name id …
-  if(rawVerb==='DEFINEBLOCK'&&parts.length>=2&&wasmReady){
-    const bname=parts[1];
-    if(!bname){ setStatus('Usage: DEFINEBLOCK name [id id …]'); cmdInput.value=''; return; }
-    // Collect IDs: explicit list from command, or fall back to selectedId.
-    let ids=[];
-    if(parts.length>=3){
-      ids=parts.slice(2).map(s=>parseInt(s)).filter(n=>!isNaN(n));
-    } else if(selectedId){
-      ids=[selectedId];
-    }
-    if(ids.length===0){ setStatus('DEFINEBLOCK: select at least one entity or list IDs'); cmdInput.value=''; return; }
-    // Derive base point from the first entity's position (x1/y1 or cx/cy).
-    // This shifts all block-local entities so the base point becomes the origin,
-    // which gives INSERT a sensible reference point matching the entity's location.
-    const entities = JSON.parse(window.cadEntities()||'[]');
-    const firstEnt = entities.find(e=>e.id===ids[0]);
-    let bx=0, by=0;
-    if(firstEnt){
-      if(firstEnt.type==='circle'||firstEnt.type==='arc'){ bx=firstEnt.cx||0; by=firstEnt.cy||0; }
-      else { bx=firstEnt.x1||0; by=firstEnt.y1||0; }
-    }
-    const ok=window.cadDefineBlock(bname,bx,by,JSON.stringify(ids));
-    if(ok){ invalidateBlockCache(bname); setStatus(`Block "${bname}" defined with ${ids.length} entity(s).`); }
-    else setStatus(`DEFINEBLOCK failed — ensure entity IDs exist.`);
-    render(); cmdInput.value=''; return;
-  }
-  // ── Task #7 command: EXPLODE id ───────────────────────────────────────────
-  if(rawVerb==='EXPLODE'&&parts.length>=2&&wasmReady){
-    const eid=parseInt(parts[1]);
-    if(!isNaN(eid)){
-      const r=window.cadExplodeBlock(eid);
-      if(r&&r!=='null') setStatus(`Exploded block ${eid} → ${r}`);
-      else setStatus(`Entity ${eid} is not a block reference.`);
-      render();
-    }
-    cmdInput.value=''; return;
-  }
-  // ── Task #7 command: INSERT name x y [sx [sy [rot]]] ─────────────────────
-  if(rawVerb==='INSERT'&&parts.length>=4&&wasmReady){
-    const name=parts[1];
-    const x=parseFloat(parts[2]),y=parseFloat(parts[3]);
-    const sx=parts[4]?parseFloat(parts[4]):1;
-    const sy2=parts[5]?parseFloat(parts[5]):sx;
-    const rot=parts[6]?parseFloat(parts[6]):0;
-    const id=window.cadInsertBlock(name,x,y,sx,sy2,rot,currentLayer,currentColor);
-    if(id>=0) setStatus(`Inserted block "${name}" id=${id}`);
-    else setStatus(`Block "${name}" not found — use Blocks… to see available blocks.`);
-    render(); cmdInput.value=''; return;
-  }
-  // ── Task #7 command: BLOCKS ───────────────────────────────────────────────
-  if(rawVerb==='BLOCKS'&&wasmReady){
-    openBlockManager(); cmdInput.value=''; return;
-  }
-  // ── Task #7 command: SYMBOLS ──────────────────────────────────────────────
-  if(rawVerb==='SYMBOLS'&&wasmReady){
-    openSymbolsPanel(); cmdInput.value=''; return;
-  }
-  // ── Leader label captured from command bar ─────────────────────────────────
-  if(currentTool==='leader'&&clicks.length>=1&&rawVerb!=='' && !(rawVerb in toolMap)){
-    pendingText=raw; commitEntity(); cmdInput.value=''; return;
-  }
-
-  // ── Handle parametric edit commands (MOVE dx dy, ROTATE angle, etc.) ─────
-  // Normalize short aliases so "M 10 5" works identically to "MOVE 10 5".
-  // Map short alias → full upper-case verb (e.g. 'M'→'MOVE', 'CP'→'COPY').
-  const verbAliases = {
-    M:'MOVE', CP:'COPY', CO:'COPY', RO:'ROTATE', SC:'SCALE',
-    MI:'MIRROR', TR:'TRIM', EX:'EXTEND', F:'FILLET', CHA:'CHAMFER',
-    AR:'ARRAYRECT', AP:'ARRAYPOLAR', O:'OFFSET',
-  };
-  const verb = verbAliases[rawVerb] || rawVerb;
-
-  if(wasmReady && selectedId && verb==='MOVE' && parts.length>=3){
-    const dx=parseFloat(parts[1]),dy=parseFloat(parts[2]);
-    window.cadMove([selectedId],dx,dy); render(); return;
-  }
-  if(wasmReady && selectedId && verb==='COPY' && parts.length>=3){
-    const dx=parseFloat(parts[1]),dy=parseFloat(parts[2]);
-    const newIDs=JSON.parse(window.cadCopy([selectedId],dx,dy)||'[]');
-    if(newIDs.length>0) selectedId=newIDs[0];
-    render(); return;
-  }
-  if(wasmReady && selectedId && (verb==='ROTATE'||verb==='ROTATECOPY') && parts.length>=2){
-    const makeCopy = verb==='ROTATECOPY';
-    const ang=parseFloat(parts[1]);
-    // ROTATE angle [cx cy]  |  ROTATECOPY angle [cx cy]
-    const cx=parts.length>=4?parseFloat(parts[2]):0;
-    const cy=parts.length>=4?parseFloat(parts[3]):0;
-    const newIDs=JSON.parse(window.cadRotate([selectedId],cx,cy,ang,makeCopy)||'[]');
-    if(makeCopy && newIDs.length>0) selectedId=newIDs[0];
-    render(); return;
-  }
-  if(wasmReady && selectedId && (verb==='SCALE'||verb==='SCALECOPY') && parts.length>=2){
-    // Supported forms (uniform preferred in hints):
-    //   SCALE factor            → uniform in-place, base at origin
-    //   SCALE factor cx cy      → uniform in-place, base at (cx,cy)
-    //   SCALE sx sy             → non-uniform in-place, base at origin
-    //   SCALE sx sy cx cy       → non-uniform in-place, base at (cx,cy)
-    // Append 'COPY' to any form to keep the original (e.g. SCALECOPY 2).
-    const makeCopy = verb==='SCALECOPY';
-    const sx=parseFloat(parts[1]);
-    let sy=sx, cx=0, cy=0;
-    if(parts.length===4){        // SCALE factor cx cy (uniform with base)
-      cx=parseFloat(parts[2]); cy=parseFloat(parts[3]);
-    } else if(parts.length===3){ // SCALE sx sy (non-uniform, no base)
-      sy=parseFloat(parts[2]);
-    } else if(parts.length>=5){  // SCALE sx sy cx cy
-      sy=parseFloat(parts[2]); cx=parseFloat(parts[3]); cy=parseFloat(parts[4]);
-    }
-    const newIDs=JSON.parse(window.cadScale([selectedId],cx,cy,sx,sy,makeCopy)||'[]');
-    if(makeCopy && newIDs.length>0) selectedId=newIDs[0];
-    render(); return;
-  }
-  if(wasmReady && selectedId && verb==='MIRRORCOPY' && parts.length>=1){
-    // MIRRORCOPY — like Mirror tool but creates a copy; 2 canvas clicks define axis.
-    editPickIds=['copy'];  // flag: copy mode
-    setTool('mirror');
-    setStatus('Mirror-Copy: click first point on mirror axis.'); return;
-  }
-  if(wasmReady && (currentTool==='fillet') && editPickIds.length===1 && verb==='FILLET' && parts.length>=2){
-    // waiting for second line click, radius given via command
-    const r=parseFloat(parts[1]);
-    setStatus(`Fillet r=${r}: now click the second line.`);
-    editPickIds.push(r); // store radius temporarily at index 1
-    return;
-  }
-  if(wasmReady && selectedId && verb==='FILLET' && parts.length>=2){
-    const r=parseFloat(parts[1]);
-    // Store first line and radius; next click selects second line
-    editPickIds=[selectedId,r];
-    setTool('fillet');
-    setStatus(`Fillet r=${r}: click the second line.`);
-    return;
-  }
-  if(wasmReady && selectedId && verb==='CHAMFER' && parts.length>=3){
-    const d1=parseFloat(parts[1]),d2=parseFloat(parts[2]);
-    editPickIds=[selectedId,d1,d2];
-    setTool('chamfer');
-    setStatus(`Chamfer d1=${d1} d2=${d2}: click the second line.`);
-    return;
-  }
-  if(wasmReady && selectedId && verb==='ARRAYRECT' && parts.length>=5){
-    const rows=parseInt(parts[1]),cols=parseInt(parts[2]);
-    const rs=parseFloat(parts[3]),cs=parseFloat(parts[4]);
-    JSON.parse(window.cadArrayRect([selectedId],rows,cols,rs,cs)||'[]');
-    render(); return;
-  }
-  if(wasmReady && selectedId && verb==='ARRAYPOLAR' && parts.length>=3){
-    const count=parseInt(parts[1]),ang=parseFloat(parts[2]);
-    const cx=parts.length>=5?parseFloat(parts[3]):0;
-    const cy=parts.length>=5?parseFloat(parts[4]):0;
-    JSON.parse(window.cadArrayPolar([selectedId],cx,cy,count,ang)||'[]');
-    render(); return;
-  }
-  if(wasmReady && selectedId && verb==='OFFSET' && parts.length>=2){
-    const dist=parseFloat(parts[1]);
-    const newIDs=JSON.parse(window.cadOffset([selectedId],dist)||'[]');
-    if(newIDs.length>0) setStatus(`Offset OK: ${newIDs.length} new entity(ies).`);
-    else setStatus('Offset: failed (entity type may not support offset).');
-    render(); return;
-  }
-
-  const action=toolMap[cmd];
-  if(!action){setStatus(`Unknown command: ${raw}`);return;}
-  switch(action){
-    case 'undo':    if(wasmReady)window.cadUndo();render();break;
-    case 'redo':    if(wasmReady)window.cadRedo();render();break;
-    case 'delete':  if(wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}break;
-    case 'clear':   if(wasmReady)window.cadClear();render();break;
-    case 'zoomfit': zoomFit();break;
-    case 'export':  exportDXF();break;
-    default: setTool(action);
-  }
-});
-
-// ─── Toolbar buttons ──────────────────────────────────────────────────────────
-['line','circle','arc','rect','poly','spline','nurbs','ellipse','text','mtext',
- 'dimlin','dimali','dimang','dimrad','dimdia',
- 'move','copy','rotate','scale','mirror','trim','extend','fillet','chamfer','arrayrect','arraypolar','offset',
-].forEach(t=>{
-  document.getElementById('tool-'+t).addEventListener('click',()=>setTool(t));
-});
-document.getElementById('btn-undo').addEventListener('click',()=>{if(wasmReady)window.cadUndo();render();});
-document.getElementById('btn-redo').addEventListener('click',()=>{if(wasmReady)window.cadRedo();render();});
-document.getElementById('btn-del').addEventListener('click',()=>{
-  if(wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}
-});
-document.getElementById('btn-clear').addEventListener('click',()=>{if(wasmReady)window.cadClear();render();});
-document.getElementById('btn-zoomfit').addEventListener('click',zoomFit);
-document.getElementById('btn-export').addEventListener('click',exportDXF);
-document.getElementById('layer-sel').addEventListener('change',e=>{
-  currentLayer=+e.target.value;
-  if(wasmReady) window.cadSetCurrentLayer(currentLayer);
-});
-document.getElementById('color-inp').addEventListener('input',e=>currentColor=e.target.value);
-
-// Snap toggle + settings popover (Task #5)
-document.getElementById('btn-snap').addEventListener('click',()=>{
-  snapEnabled=!snapEnabled; snapResult=null;
-  drawSnapMarker(); updateSnapBtn(); saveSnapSettings();
-  setStatus(snapEnabled?'Object Snap ON (F3 to toggle)':'Object Snap OFF (F3 to toggle)');
-});
-document.getElementById('btn-snap-settings').addEventListener('click',e=>{
-  e.stopPropagation();
-  document.getElementById('snap-settings').classList.toggle('open');
-});
-// Close snap settings when clicking outside
-document.addEventListener('click',e=>{
-  const panel=document.getElementById('snap-settings');
-  if(panel.classList.contains('open')&&!panel.contains(e.target)&&e.target.id!=='btn-snap-settings'){
-    closeSnapSettings();
-  }
-});
-// Auto-save snap settings when individual mode checkboxes change
-Object.keys(SNAP_BITS).forEach(id=>{
-  const el=document.getElementById(id);
-  if(el) el.addEventListener('change',saveSnapSettings);
-});
-
-// ─── Task #7: Block Manager ───────────────────────────────────────────────────
-function openBlockManager(){
-  if(!wasmReady){ setStatus('WASM not ready'); return; }
-  invalidateBlockCache(); // refresh so newly-defined blocks are reflected
-  const blocks = JSON.parse(window.cadGetBlocks()||'[]');
-  const list = document.getElementById('block-list');
-  if(blocks.length===0){
-    list.innerHTML='<div style="padding:12px;color:#666;font-size:12px">(no blocks defined — use: DEFINEBLOCK name after selecting entities)</div>';
-  } else {
-    list.innerHTML = blocks.map(b=>`
-      <div class="block-item">
-        <canvas class="block-thumb" data-block="${escH(b.name)}" width="72" height="54" title="${escH(b.name)}"></canvas>
-        <div class="block-info">
-          <span class="block-name">${escH(b.name)}</span>
-          <span class="block-meta">${b.count} ent. &nbsp;base(${b.baseX.toFixed(1)},${b.baseY.toFixed(1)})</span>
-        </div>
-        <button class="block-insert-btn" data-block="${escH(b.name)}">Insert</button>
-      </div>`).join('');
-    // Draw preview thumbnails on each mini canvas.
-    list.querySelectorAll('.block-thumb').forEach(cv=>{
-      drawBlockPreview(cv, cv.dataset.block);
-    });
-    // Wire Insert buttons via event delegation — no inline onclick (avoids XSS/quoting issues).
-    list.querySelectorAll('.block-insert-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>promptInsertBlock(btn.dataset.block));
-    });
-  }
-  document.getElementById('block-modal').classList.add('open');
-}
-
-// drawBlockPreview renders block-local entities onto a mini thumbnail canvas.
-function drawBlockPreview(canvas, blockName) {
-  const ents = getBlockEntities(blockName);
-  const ctx2 = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx2.clearRect(0,0,W,H);
-  if(!ents || ents.length===0) {
-    ctx2.fillStyle='#555'; ctx2.font='9px sans-serif'; ctx2.textAlign='center';
-    ctx2.fillText('(empty)',W/2,H/2+3); return;
-  }
-  // Compute bounding box of all entities in block-local coords.
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  function bboxPt(x,y){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
-  ents.forEach(be=>{
-    switch(be.type){
-      case 'line': bboxPt(be.x1,be.y1); bboxPt(be.x2,be.y2); break;
-      case 'circle': case 'arc':
-        bboxPt(be.cx-be.r,be.cy-be.r); bboxPt(be.cx+be.r,be.cy+be.r); break;
-      case 'text': bboxPt(be.x1,be.y1); break;
-      default:
-        (be.points||[]).forEach(p=>bboxPt(p[0],p[1]));
-    }
-  });
-  if(!isFinite(minX)){ ctx2.fillStyle='#555'; ctx2.font='9px sans-serif'; ctx2.textAlign='center'; ctx2.fillText('?',W/2,H/2); return; }
-  const pad=4;
-  const rangeX=maxX-minX||1, rangeY=maxY-minY||1;
-  const sc=Math.min((W-pad*2)/rangeX,(H-pad*2)/rangeY);
-  // Map block-local → thumbnail canvas coords.
-  function toThumb(x,y){ return [pad+(x-minX)*sc, H-pad-(y-minY)*sc]; }
-
-  ctx2.strokeStyle='#7ec8e3'; ctx2.fillStyle='#7ec8e3'; ctx2.lineWidth=1;
-  ents.forEach(be=>{
-    switch(be.type){
-      case 'line': {
-        const[ax,ay]=toThumb(be.x1,be.y1),[bx,by]=toThumb(be.x2,be.y2);
-        ctx2.beginPath(); ctx2.moveTo(ax,ay); ctx2.lineTo(bx,by); ctx2.stroke(); break;
-      }
-      case 'circle': {
-        const[cx2,cy2]=toThumb(be.cx,be.cy);
-        ctx2.beginPath(); ctx2.arc(cx2,cy2,be.r*sc,0,2*Math.PI); ctx2.stroke(); break;
-      }
-      case 'arc': {
-        const[cx2,cy2]=toThumb(be.cx,be.cy);
-        ctx2.beginPath();
-        ctx2.arc(cx2,cy2,be.r*sc,-be.startDeg*Math.PI/180,-be.endDeg*Math.PI/180,false);
-        ctx2.stroke(); break;
-      }
-      default: {
-        const pts2=be.points||[];
-        if(pts2.length<2) break;
-        const[fx,fy]=toThumb(pts2[0][0],pts2[0][1]);
-        ctx2.beginPath(); ctx2.moveTo(fx,fy);
-        for(let j=1;j<pts2.length;j++){ const[px,py]=toThumb(pts2[j][0],pts2[j][1]); ctx2.lineTo(px,py); }
-        ctx2.stroke();
-      }
-    }
-  });
-}
-function closeBlockManager(){
-  document.getElementById('block-modal').classList.remove('open');
-}
-function promptInsertBlock(name){
-  const xStr=prompt(`Insert block "${name}" — X:`, '0');
-  if(xStr===null) return;
-  const yStr=prompt('Y:', '0');
-  if(yStr===null) return;
-  const scStr=prompt('Scale (1=full size):', '1');
-  const x=parseFloat(xStr)||0, y=parseFloat(yStr)||0, sc=parseFloat(scStr)||1;
-  const id=window.cadInsertBlock(name,x,y,sc,sc,0,currentLayer,currentColor);
-  if(id>=0) setStatus(`Inserted block "${name}" id=${id}`);
-  else setStatus(`Failed to insert block "${name}" — is it defined?`);
-  closeBlockManager(); render();
-}
-
-document.getElementById('btn-blocks').addEventListener('click',openBlockManager);
-document.getElementById('btn-close-blocks').addEventListener('click',closeBlockManager);
-document.getElementById('btn-close-blocks2').addEventListener('click',closeBlockManager);
-document.getElementById('block-modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('block-modal')) closeBlockManager();
-});
-
-// ─── Task #7: Symbols Panel ───────────────────────────────────────────────────
-function openSymbolsPanel(){
-  const names = wasmReady
-    ? JSON.parse(window.cadGetSymbols()||'[]')
-    : ['CENTER_MARK','NORTH_ARROW','REVISION_TRIANGLE','DATUM_TRIANGLE','SURFACE_FINISH'];
-  const list = document.getElementById('sym-list');
-  list.innerHTML = names.map(n=>`
-    <div class="sym-item">
-      <span>${escH(n)}</span>
-      <button class="sym-insert-btn" data-sym="${escH(n)}">Insert</button>
-    </div>`).join('');
-  // Wire Insert buttons via event delegation — no inline onclick.
-  list.querySelectorAll('.sym-insert-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>promptInsertSymbol(btn.dataset.sym));
-  });
-  document.getElementById('sym-modal').classList.add('open');
-}
-function closeSymbolsPanel(){
-  document.getElementById('sym-modal').classList.remove('open');
-}
-function promptInsertSymbol(name){
-  const xStr=prompt(`Insert symbol "${name}" — X:`, '0');
-  if(xStr===null) return;
-  const yStr=prompt('Y:', '0');
-  if(yStr===null) return;
-  const scStr=prompt('Scale:', '1');
-  const x=parseFloat(xStr)||0, y=parseFloat(yStr)||0, sc=parseFloat(scStr)||1;
-  if(!wasmReady){ setStatus('WASM not ready'); return; }
-  const id=window.cadInsertSymbol(name,x,y,sc,0,currentLayer,currentColor);
-  if(id>=0) setStatus(`Inserted symbol "${name}" id=${id}`);
-  else setStatus(`Failed to insert symbol "${name}" — may not be registered`);
-  closeSymbolsPanel(); render();
-}
-
-document.getElementById('btn-symbols').addEventListener('click',openSymbolsPanel);
-document.getElementById('btn-close-sym').addEventListener('click',closeSymbolsPanel);
-document.getElementById('sym-modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('sym-modal')) closeSymbolsPanel();
-});
-
-// ─── Task #7: Hatch/annotation toolbar buttons ────────────────────────────────
-document.getElementById('tool-hatch').addEventListener('click',()=>setTool('hatch'));
-document.getElementById('tool-leader').addEventListener('click',()=>setTool('leader'));
-document.getElementById('tool-revcloud').addEventListener('click',()=>setTool('revcloud'));
-document.getElementById('tool-wipeout').addEventListener('click',()=>setTool('wipeout'));
-
-// Layer Manager (Task #5)
-document.getElementById('btn-layers').addEventListener('click',openLayerManager);
-document.getElementById('btn-close-layers').addEventListener('click',closeLayerManager);
-document.getElementById('btn-add-layer').addEventListener('click',()=>{
-  const name=prompt('New layer name:','Layer '+Date.now());
-  if(!name) return;
-  if(wasmReady) window.cadAddLayer(name,'#ffffff');
-  refreshLayerTable(); refreshLayerSel();
-});
-document.getElementById('layer-modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('layer-modal')) closeLayerManager();
-});
-
-// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
-document.addEventListener('keydown', e=>{
-  if(document.activeElement===cmdInput) return;
-  if(e.ctrlKey||e.metaKey){
-    if(e.key==='z'){e.preventDefault();if(wasmReady)window.cadUndo();render();}
-    if(e.key==='y'||e.key==='Y'){e.preventDefault();if(wasmReady)window.cadRedo();render();}
-    if(e.key==='o'||e.key==='O'){e.preventDefault();openDXFFile();}
-    return;
-  }
-  // F3: toggle Object Snap (Task #5)
-  if(e.key==='F3'){
-    e.preventDefault();
-    snapEnabled=!snapEnabled; snapResult=null;
-    drawSnapMarker(); updateSnapBtn();
-    setStatus(snapEnabled?'Object Snap ON':'Object Snap OFF');
-    return;
-  }
-  const map={l:'line',c:'circle',a:'arc',r:'rect',p:'poly',
-             s:'spline',n:'nurbs',e:'ellipse',t:'text'};
-  if(map[e.key.toLowerCase()]){setTool(map[e.key.toLowerCase()]);return;}
-  if(e.key==='Delete'&&wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}
-  if(e.key==='Escape'){clicks=[];snapResult=null;drawSnapMarker();render();}
-  if(e.key==='Enter'&&['poly','spline','nurbs','hatch','revcloud','wipeout'].includes(currentTool)) commitEntity();
-  // Leader: Enter commits but first collects label if typed
-  if(e.key==='Enter'&&currentTool==='leader'&&clicks.length>=2) commitEntity();
-});
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
-function setStatus(msg){document.getElementById('status').textContent=msg;}
-
-function zoomFit(){
-  if(!wasmReady) return;
-  const es=JSON.parse(window.cadEntities()||'[]');
-  if(!es.length){panX=0;panY=0;zoom=1;render();return;}
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  es.forEach(e=>entitySamplePoints(e).forEach(([x,y])=>{
-    if(x<minX)minX=x;if(y<minY)minY=y;if(x>maxX)maxX=x;if(y>maxY)maxY=y;
-  }));
-  if(!isFinite(minX)){panX=0;panY=0;zoom=1;render();return;}
-  const padX=(maxX-minX)*0.1+10,padY=(maxY-minY)*0.1+10;
-  minX-=padX;maxX+=padX;minY-=padY;maxY+=padY;
-  zoom=Math.min(canvas.width/(maxX-minX),canvas.height/(maxY-minY));
-  panX=canvas.width/2-((minX+maxX)/2)*zoom;
-  panY=canvas.height/2+((minY+maxY)/2)*zoom;
-  render();
-}
-
-function entitySamplePoints(e){
-  switch(e.type){
-    case 'line': return[[e.x1,e.y1],[e.x2,e.y2]];
-    case 'circle':case 'arc':
-      return[[e.cx+e.r,e.cy],[e.cx-e.r,e.cy],[e.cx,e.cy+e.r],[e.cx,e.cy-e.r]];
-    case 'rectangle': return[[e.x1,e.y1],[e.x2,e.y2]];
-    case 'polyline':case 'spline':case 'nurbs': return e.points||[];
-    case 'ellipse': return[[e.cx+(e.r||0),e.cy],[e.cx-(e.r||0),e.cy],
-                           [e.cx,e.cy+(e.r2||0)],[e.cx,e.cy-(e.r2||0)]];
-    case 'text':case 'mtext': return[[e.x1,e.y1]];
-    case 'blockref': return[[e.x1,e.y1]];
-    case 'hatch':case 'revcloud':case 'wipeout': return(e.points||[]).map(p=>[p[0],p[1]]);
-    case 'leader': return(e.points||[]).map(p=>[p[0],p[1]]);
-    default: return e.cx!=null?[[e.cx,e.cy]]:[[e.x1||0,e.y1||0],[e.x2||0,e.y2||0]];
-  }
-}
-
-function exportDXF(){
-  if(!wasmReady) return;
-  const fmt=document.getElementById('export-fmt').value;
-  let content, mime, ext;
-  if(fmt==='svg'){
-    content=window.cadExportSVG();
-    mime='image/svg+xml'; ext='svg';
-  } else if(fmt==='r12'){
-    content=window.cadExportDXFR12();
-    mime='text/plain'; ext='dxf';
-  } else {
-    content=window.cadExportDXF();
-    mime='text/plain'; ext='dxf';
-  }
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
-  a.download=`drawing_${fmt}.${ext}`; a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-// ── Task #6: DXF import via file picker ───────────────────────────────────────
-function openDXFFile(){
-  document.getElementById('file-input').click();
-}
-
-document.getElementById('btn-open').addEventListener('click', openDXFFile);
-
-document.getElementById('file-input').addEventListener('change', function(ev){
-  const file = ev.target.files[0];
-  if(!file) return;
-  if(!wasmReady){ setStatus('WASM not ready yet — try again.'); return; }
-  const reader = new FileReader();
-  reader.onload = function(e){
-    const dxfText = e.target.result;
-    let result;
-    try {
-      result = JSON.parse(window.cadLoadDXF(dxfText));
-    } catch(err) {
-      setStatus('DXF import failed: ' + err.message);
-      return;
-    }
-    if(!result.ok){
-      setStatus('DXF import error: ' + result.error);
-      return;
-    }
-    refreshLayers();
-    render();
-    zoomFit();
-    const warnTxt = result.warnings && result.warnings.length
-      ? ` (${result.warnings.length} warning${result.warnings.length>1?'s':''})` : '';
-    setStatus(`Loaded ${file.name}: ${result.count} entities${warnTxt}`);
-  };
-  reader.onerror = function(){ setStatus('Failed to read file.'); };
-  reader.readAsText(file);
-  ev.target.value=''; // allow re-opening same file
-});
-
-// ─── NURBS evaluator (JavaScript, for canvas rendering) ───────────────────────
-function nurbsBasis(i,k,knots,t){
-  if(k===0) return knots[i]<=t&&t<knots[i+1]?1:0;
-  const d1=knots[i+k]-knots[i], d2=knots[i+k+1]-knots[i+1];
-  let l=0,r=0;
-  if(d1>1e-10) l=(t-knots[i])/d1*nurbsBasis(i,k-1,knots,t);
-  if(d2>1e-10) r=(knots[i+k+1]-t)/d2*nurbsBasis(i+1,k-1,knots,t);
-  return l+r;
-}
-
-function nurbsEval(deg,controls,knots,weights,t){
-  let wx=0,wy=0,w=0;
-  for(let i=0;i<controls.length;i++){
-    const b=nurbsBasis(i,deg,knots,t);
-    const wi=weights?weights[i]:1;
-    const bw=b*wi;
-    wx+=bw*controls[i][0]; wy+=bw*controls[i][1]; w+=bw;
-  }
-  if(w<1e-10) return controls[0]||[0,0];
-  return [wx/w,wy/w];
-}
-
-function clampedUniformKnots(n,deg){
-  const m=n+deg+1, knots=new Array(m).fill(0);
-  const inner=n-deg;
-  for(let i=0;i<=deg;i++) knots[i]=0;
-  for(let i=1;i<inner;i++) knots[deg+i]=i/inner;
-  for(let i=n;i<m;i++) knots[i]=1;
-  return knots;
-}
-
-// ─── Renderer ─────────────────────────────────────────────────────────────────
-const ARROW=8;
-
-function render(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawGrid();
-  if(!wasmReady){
-    ctx.fillStyle='#666';ctx.font='14px sans-serif';ctx.textAlign='center';
-    ctx.fillText('Loading WASM…',canvas.width/2,canvas.height/2);
-    return;
-  }
-  // Build layer cache (id→layer) for BYLAYER color+linetype resolution (Task #5)
-  const hiddenLayers = new Set();
-  window._layerCache = {};
-  window._lockedLayers = new Set();
+// Update sidebar drawing info every 2 seconds
+setInterval(() => {
+  if (!state.wasmReady) return;
   try {
-    const layers=JSON.parse(window.cadGetLayers()||'[]');
-    layers.forEach(l=>{
-      window._layerCache[l.id]=l;
-      if(!l.visible||l.frozen) hiddenLayers.add(l.id);
-      if(l.locked) window._lockedLayers.add(l.id);
-    });
-  } catch(_){}
+    const ents   = JSON.parse(window.cadEntities() || '[]');
+    const layers = JSON.parse(window.cadGetLayers() || '[]');
+    const entEl  = document.getElementById('ent-count');
+    const layEl  = document.getElementById('layer-count');
+    const zoomEl = document.getElementById('zoom-display');
+    if (entEl)  entEl.textContent  = ents.length;
+    if (layEl)  layEl.textContent  = layers.length;
+    if (zoomEl) zoomEl.textContent = (state.zoom * 100).toFixed(0) + '%';
 
-  const entities=JSON.parse(window.cadEntities()||'[]');
-  entities.forEach(e=>{
-    if(hiddenLayers.has(e.layer)) return; // skip frozen/invisible layers
-    drawEntity(e,e.id===selectedId);
-  });
-  drawPreview();
-  if(tempPt){
-    const [sx,sy]=w2s(tempPt[0],tempPt[1]);
-    ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.2)';
-    ctx.lineWidth=1; ctx.setLineDash([4,4]);
-    ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,canvas.height);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(canvas.width,sy);ctx.stroke();
-    ctx.restore();
-  }
-  drawSnapMarker();
-}
-
-function drawGrid(){
-  const step=Math.max(10,Math.round(50/zoom)*10);
-  const [,oy]=w2s(0,0); const [ox]=w2s(0,0);
-  ctx.save(); ctx.lineWidth=1;
-  ctx.strokeStyle='rgba(255,255,255,0.05)';
-  const sX=Math.floor((-panX-canvas.width/2)/(zoom*step))*step;
-  for(let wx=sX;wx<sX+canvas.width/zoom+step;wx+=step){
-    const [sx]=w2s(wx,0);
-    ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,canvas.height);ctx.stroke();
-  }
-  const sY=Math.floor((-panY-canvas.height/2)/(zoom*step))*step;
-  for(let wy=sY;wy<sY+canvas.height/zoom+step;wy+=step){
-    const [,sy]=w2s(0,wy);
-    ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(canvas.width,sy);ctx.stroke();
-  }
-  ctx.strokeStyle='rgba(255,255,255,0.12)';
-  ctx.beginPath();ctx.moveTo(0,oy);ctx.lineTo(canvas.width,oy);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(ox,0);ctx.lineTo(ox,canvas.height);ctx.stroke();
-  ctx.restore();
-}
-
-// ─── Line dash patterns for layer LineTyp (Task #5) ──────────────────────────
-const LAYER_DASH = {
-  Solid:   [],
-  Dashed:  [8,4],
-  Dotted:  [1,4],
-  DashDot: [8,4,1,4],
-  Center:  [16,4,4,4],
-  Hidden:  [4,4],
-};
-
-// Resolve BYLAYER color and line type from the cached layer map.
-// Color: use entity's explicit color unless it is BYLAYER/empty → inherit from layer.
-// LineType: always inherited from layer (entities don't store an explicit linetype).
-// Returns {color, dash[]} for drawing.
-function resolveEntityStyle(e, sel){
-  if(sel) return {color:'#ff9800', dash:[]};
-  let color = e.color || '';
-  let dash   = [];
-  const lyr = window._layerCache ? (window._layerCache[e.layer||0]||null) : null;
-  // Linetype is always taken from the layer (BYLAYER by default in CAD)
-  if(lyr) dash = LAYER_DASH[lyr.lineType] || [];
-  // Color: BYLAYER or missing → use layer color
-  if(!color || color.toUpperCase()==='BYLAYER'){
-    color = lyr ? lyr.color : '#ffffff';
-  }
-  if(!color) color='#ffffff';
-  return {color, dash};
-}
-
-function drawEntity(e,sel=false){
-  const {color:col, dash} = resolveEntityStyle(e, sel);
-  ctx.save(); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=sel?2:1;
-  if(dash&&dash.length) ctx.setLineDash(dash); else ctx.setLineDash([]);
-  switch(e.type){
-    case 'line':{
-      const[x1,y1]=w2s(e.x1,e.y1),[x2,y2]=w2s(e.x2,e.y2);
-      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke(); break;
+    // Refresh layers sidebar
+    const sidebar = document.getElementById('layers-sidebar');
+    if (sidebar) {
+      sidebar.innerHTML = layers.map(l => `
+        <div class="layer-quick-row" title="${l.name}">
+          <span class="layer-swatch" style="background:${l.color||'#fff'}"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${l.name}</span>
+          <span style="font-size:10px;color:#555">${l.visible?'':'👁'}</span>
+        </div>`).join('');
     }
-    case 'circle':{
-      const[cx,cy]=w2s(e.cx,e.cy);
-      ctx.beginPath();ctx.arc(cx,cy,e.r*zoom,0,2*Math.PI);ctx.stroke(); break;
-    }
-    case 'arc':{
-      const[cx,cy]=w2s(e.cx,e.cy);
-      const a1=-e.startDeg*Math.PI/180,a2=-e.endDeg*Math.PI/180;
-      ctx.beginPath();ctx.arc(cx,cy,e.r*zoom,a1,a2,a1>a2);ctx.stroke(); break;
-    }
-    case 'rectangle':{
-      const[x1,y1]=w2s(e.x1,e.y1),[x2,y2]=w2s(e.x2,e.y2);
-      ctx.beginPath();ctx.rect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));
-      ctx.stroke(); break;
-    }
-    case 'polyline':
-      drawPolylineScrPts(ctx,(e.points||[]).map(p=>w2s(p[0],p[1]))); break;
-    case 'spline':
-      drawBezierSpline(ctx,(e.points||[]).map(p=>w2s(p[0],p[1]))); break;
-    case 'nurbs':
-      drawNURBSEntity(ctx,e); break;
-    case 'ellipse':{
-      const[cx,cy]=w2s(e.cx,e.cy);
-      ctx.beginPath();
-      ctx.ellipse(cx,cy,(e.r||1)*zoom,(e.r2||e.r||1)*zoom,-(e.rotDeg||0)*Math.PI/180,0,2*Math.PI);
-      ctx.stroke(); break;
-    }
-    case 'text':{
-      const[sx,sy]=w2s(e.x1,e.y1);
-      const h=Math.max(8,(e.textHeight||2.5)*zoom);
-      ctx.save();ctx.translate(sx,sy);ctx.rotate(-(e.rotDeg||0)*Math.PI/180);
-      ctx.font=`${h}px ${e.font||'monospace'}`;ctx.fillText(e.text||'',0,0);
-      ctx.restore(); break;
-    }
-    case 'mtext':{
-      const[sx,sy]=w2s(e.x1,e.y1);
-      const h=Math.max(8,(e.textHeight||3)*zoom);
-      const lines=(e.text||'').split('\n');
-      ctx.save();ctx.translate(sx,sy);ctx.rotate(-(e.rotDeg||0)*Math.PI/180);
-      ctx.font=`${h}px ${e.font||'monospace'}`;
-      lines.forEach((ln,i)=>ctx.fillText(ln,0,i*h*1.5));
-      ctx.restore(); break;
-    }
-    case 'dimlin':case 'dimali': drawLinearDim(ctx,e,col); break;
-    case 'dimang': drawAngularDim(ctx,e,col); break;
-    case 'dimrad': drawRadialDim(ctx,e,col,false); break;
-    case 'dimdia': drawRadialDim(ctx,e,col,true); break;
-    // ── Task #7 types ──────────────────────────────────────────────────────────
-    case 'blockref':
-      drawBlockRef(ctx,e,col,sel); break;
-    case 'hatch':
-      drawHatch(ctx,e,col); break;
-    case 'leader':
-      drawLeader(ctx,e,col); break;
-    case 'revcloud':
-      drawRevCloud(ctx,e,col); break;
-    case 'wipeout':
-      drawWipeout(ctx,e,col); break;
-  }
-  ctx.restore();
-}
 
-// ── Task #7 entity renderers ──────────────────────────────────────────────────
-
-// Block entity cache: blockName → Entity[]  (refreshed when modal opens / WASM loads)
-const _blockEntCache = {};
-function getBlockEntities(name) {
-  if (!wasmReady || !window.cadGetBlockEntities) return [];
-  if (!_blockEntCache[name]) {
-    try { _blockEntCache[name] = JSON.parse(window.cadGetBlockEntities(name) || '[]'); }
-    catch(_) { _blockEntCache[name] = []; }
-  }
-  return _blockEntCache[name];
-}
-function invalidateBlockCache(name) { if(name) delete _blockEntCache[name]; else Object.keys(_blockEntCache).forEach(k=>delete _blockEntCache[k]); }
-
-function drawBlockRef(c2, e, col, sel) {
-  // Apply the INSERT transform: translate to insertion point, scale, rotate,
-  // then draw each block-local entity in world space via w2s().
-  const name = e.text || '';
-  const ix = e.x1, iy = e.y1;       // insertion point (world coords)
-  const sx = e.r  || 1, sy2= e.r2 || 1; // scaleX, scaleY
-  const rot = (e.rotDeg || 0) * Math.PI / 180;
-  const cosR = Math.cos(rot), sinR = Math.sin(rot);
-
-  // Transform block-local point to world coords.
-  function localToWorld(lx, ly) {
-    return [
-      ix + lx * sx * cosR - ly * sy2 * sinR,
-      iy + lx * sx * sinR + ly * sy2 * cosR
-    ];
-  }
-
-  const ents = getBlockEntities(name);
-  const strokeCol = sel ? '#ff9800' : col;
-
-  if (ents.length === 0) {
-    // Fallback: draw insertion cross if block has no cached entities yet.
-    const [scx, scy] = w2s(ix, iy);
-    const sz = 10;
-    c2.save();
-    c2.strokeStyle = strokeCol; c2.lineWidth = sel ? 2 : 1;
-    c2.beginPath(); c2.moveTo(scx-sz,scy); c2.lineTo(scx+sz,scy); c2.stroke();
-    c2.beginPath(); c2.moveTo(scx,scy-sz); c2.lineTo(scx,scy+sz); c2.stroke();
-    c2.fillStyle = strokeCol; c2.font='9px monospace'; c2.textAlign='left';
-    c2.fillText(name||'?', scx+sz+2, scy-2);
-    c2.restore();
-    return;
-  }
-
-  c2.save();
-  c2.strokeStyle = strokeCol; c2.fillStyle = strokeCol;
-  c2.lineWidth = sel ? 2 : 1; c2.setLineDash([]);
-
-  ents.forEach(be => {
-    switch(be.type) {
-      case 'line': {
-        const [ax,ay] = w2s(...localToWorld(be.x1, be.y1));
-        const [bx,by] = w2s(...localToWorld(be.x2, be.y2));
-        c2.beginPath(); c2.moveTo(ax,ay); c2.lineTo(bx,by); c2.stroke();
-        break;
-      }
-      case 'circle': {
-        const [cx2,cy2] = w2s(...localToWorld(be.cx, be.cy));
-        const rScr = be.r * sx * zoom;
-        c2.beginPath(); c2.arc(cx2,cy2,Math.abs(rScr),0,2*Math.PI); c2.stroke();
-        break;
-      }
-      case 'arc': {
-        const [cx2,cy2] = w2s(...localToWorld(be.cx, be.cy));
-        const rScr = be.r * sx * zoom;
-        const sa = -(be.startDeg + (e.rotDeg||0)) * Math.PI/180;
-        const ea = -(be.endDeg   + (e.rotDeg||0)) * Math.PI/180;
-        c2.beginPath(); c2.arc(cx2,cy2,Math.abs(rScr),sa,ea); c2.stroke();
-        break;
-      }
-      case 'text': {
-        const [tx,ty] = w2s(...localToWorld(be.x1, be.y1));
-        c2.font=`${Math.max(7,(be.textHeight||2.5)*zoom)}px sans-serif`;
-        c2.textAlign='left'; c2.fillText(be.text||'', tx, ty);
-        break;
-      }
-      case 'polyline':
-      case 'polygon': {
-        const pts2 = (be.points||[]);
-        if(pts2.length<2) break;
-        c2.beginPath();
-        const[fx,fy]=w2s(...localToWorld(pts2[0][0],pts2[0][1])); c2.moveTo(fx,fy);
-        for(let j=1;j<pts2.length;j++){
-          const[px,py]=w2s(...localToWorld(pts2[j][0],pts2[j][1]));c2.lineTo(px,py);
-        }
-        if(be.type==='polygon') c2.closePath();
-        c2.stroke();
-        break;
+    // Refresh block library sidebar
+    const blockLib = document.getElementById('block-library-content');
+    if (blockLib && window.cadGetBlocks) {
+      const blocks = JSON.parse(window.cadGetBlocks() || '[]');
+      if (blocks.length === 0) {
+        blockLib.innerHTML = '<div style="color:var(--text-dim);font-size:11px">(no blocks defined)</div>';
+      } else {
+        blockLib.innerHTML = blocks.slice(0, 20).map(b => `
+          <div class="block-lib-item" data-block="${b.name}" title="Click to insert ${b.name}">
+            <canvas class="block-lib-icon" data-block="${b.name}" width="28" height="22"></canvas>
+            <span>${b.name}</span>
+          </div>`).join('');
       }
     }
-  });
+  } catch (_) {}
+}, 2000);
 
-  // Insertion-point marker (small cross, dimmed)
-  const [mx,my]=w2s(ix,iy);
-  c2.globalAlpha=0.4; c2.lineWidth=0.7;
-  c2.beginPath();c2.moveTo(mx-5,my);c2.lineTo(mx+5,my);c2.stroke();
-  c2.beginPath();c2.moveTo(mx,my-5);c2.lineTo(mx,my+5);c2.stroke();
-  c2.globalAlpha=1;
-  c2.restore();
-}
+// Layer sidebar manager button
+document.getElementById('btn-layers-sidebar')?.addEventListener('click', openLayerManager);
 
-function drawHatch(c2, e, col) {
-  const pts = (e.points||[]);
-  if(pts.length < 3) return;
-  const solid = (e.text||'').toUpperCase() === 'SOLID';
-  if(solid) {
-    // Solid fill: canvas path fill.
-    c2.save();
-    c2.fillStyle = col;
-    c2.globalAlpha = 0.35;
-    c2.beginPath();
-    const [fx,fy]=w2s(pts[0][0],pts[0][1]);
-    c2.moveTo(fx,fy);
-    for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
-    c2.closePath(); c2.fill();
-    c2.restore();
-  } else {
-    // Hatched fill: draw boundary + hatch lines via Go WASM if available.
-    c2.save();
-    c2.strokeStyle = col; c2.lineWidth = 0.8;
-    // Draw boundary
-    c2.beginPath();
-    const [fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
-    for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
-    c2.closePath(); c2.stroke();
-    // Draw hatch lines from WASM cadRenderHatch
-    if(wasmReady && window.cadRenderHatch) {
-      try {
-        const segs = JSON.parse(window.cadRenderHatch(e.id)||'[]');
-        segs.forEach(s=>{
-          const [sx1,sy1]=w2s(s[0],s[1]), [sx2,sy2]=w2s(s[2],s[3]);
-          c2.beginPath(); c2.moveTo(sx1,sy1); c2.lineTo(sx2,sy2); c2.stroke();
-        });
-      } catch(_){}
-    } else {
-      // Fallback: draw simple diagonal lines in screen space.
-      drawHatchFallback(c2, pts, col);
-    }
-    c2.restore();
-  }
-}
-
-function drawHatchFallback(c2, pts, col) {
-  // Simple diagonal line fill in screen space for demo mode.
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  pts.forEach(p=>{const[sx,sy]=w2s(p[0],p[1]);
-    if(sx<minX)minX=sx;if(sy<minY)minY=sy;if(sx>maxX)maxX=sx;if(sy>maxY)maxY=sy;
-  });
-  c2.save();
-  c2.strokeStyle=col; c2.lineWidth=0.7;
-  // Clip to polygon
-  c2.beginPath();
-  const[fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
-  for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
-  c2.closePath(); c2.clip();
-  const spacing=10;
-  for(let t=minX-maxY+minY;t<maxX+maxY-minY;t+=spacing){
-    c2.beginPath(); c2.moveTo(t,minY-spacing); c2.lineTo(t+maxY-minY+spacing,maxY+spacing); c2.stroke();
-  }
-  c2.restore();
-}
-
-function drawLeader(c2, e, col) {
-  const pts = e.points||[];
-  if(pts.length<2) return;
-  c2.save();
-  c2.strokeStyle=col; c2.fillStyle=col; c2.lineWidth=1; c2.setLineDash([]);
-  // Draw lines
-  c2.beginPath();
-  const[fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
-  for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
-  c2.stroke();
-  // Arrow at first point (tip)
-  const[p0x,p0y]=w2s(pts[0][0],pts[0][1]);
-  const[p1x,p1y]=w2s(pts[1][0],pts[1][1]);
-  screenArrow(c2,p0x,p0y,p0x-p1x,p0y-p1y);
-  // Label at last segment end
-  if(e.text){
-    const last=pts[pts.length-1];
-    const[lx,ly]=w2s(last[0],last[1]);
-    c2.font='11px sans-serif'; c2.textAlign='left';
-    c2.fillText(e.text,lx+4,ly-4);
-  }
-  c2.restore();
-}
-
-function drawRevCloud(c2, e, col) {
-  const pts = e.points||[];
-  if(pts.length<3) return;
-  // Draw polygon boundary with arc-like bumps on each edge.
-  c2.save();
-  c2.strokeStyle=col; c2.lineWidth=1; c2.setLineDash([]);
-  const all=[...pts, pts[0]]; // close polygon
-  for(let i=0;i<all.length-1;i++){
-    const[ax,ay]=w2s(all[i][0],all[i][1]);
-    const[bx,by]=w2s(all[i+1][0],all[i+1][1]);
-    const mx=(ax+bx)/2, my=(ay+by)/2;
-    const len=Math.hypot(bx-ax,by-ay)||1;
-    const nx=-(by-ay)/len, ny=(bx-ax)/len;
-    const bump=6; // px
-    c2.beginPath();
-    c2.moveTo(ax,ay);
-    c2.quadraticCurveTo(mx+nx*bump,my+ny*bump,bx,by);
-    c2.stroke();
-  }
-  c2.restore();
-}
-
-function drawWipeout(c2, e, col) {
-  const pts = e.points||[];
-  if(pts.length<3) return;
-  c2.save();
-  // Fill with near-background color to mask entities behind it.
-  c2.fillStyle='#1e1e1e';
-  c2.strokeStyle=col||'#555';
-  c2.lineWidth=1; c2.setLineDash([4,3]);
-  c2.beginPath();
-  const[fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
-  for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
-  c2.closePath(); c2.fill(); c2.stroke();
-  c2.restore();
-}
-
-// ── Spline renderers ──────────────────────────────────────────────────────────
-function drawPolylineScrPts(c2,pts){
-  if(pts.length<2) return;
-  c2.beginPath();c2.moveTo(pts[0][0],pts[0][1]);
-  for(let i=1;i<pts.length;i++) c2.lineTo(pts[i][0],pts[i][1]);
-  c2.stroke();
-}
-
-function drawBezierSpline(c2,pts){
-  if(pts.length<4){drawPolylineScrPts(c2,pts);return;}
-  const nSegs=Math.floor((pts.length-1)/3);
-  c2.beginPath();c2.moveTo(pts[0][0],pts[0][1]);
-  for(let i=0;i<nSegs;i++){
-    const b=i*3;
-    c2.bezierCurveTo(pts[b+1][0],pts[b+1][1],pts[b+2][0],pts[b+2][1],pts[b+3][0],pts[b+3][1]);
-  }
-  c2.stroke();
-}
-
-function drawNURBSEntity(c2,e){
-  const controls=e.points||[];
-  const n=controls.length;
-  if(n<2) return;
-  const deg=e.nurbsDeg||3;
-  const knots=e.knots&&e.knots.length>=n+deg+1?e.knots:clampedUniformKnots(n,deg);
-  const weights=e.weights;
-  const lo=knots[deg], hi=knots[n];
-  const samples=Math.max(50,n*15);
-  c2.beginPath();
-  for(let k=0;k<=samples;k++){
-    let t=lo+(k/samples)*(hi-lo);
-    if(t>=hi) t=hi-1e-10;
-    const[wx,wy]=nurbsEval(deg,controls,knots,weights,t);
-    const[sx,sy]=w2s(wx,wy);
-    if(k===0) c2.moveTo(sx,sy); else c2.lineTo(sx,sy);
-  }
-  c2.stroke();
-}
-
-// ── Dimension renderers ───────────────────────────────────────────────────────
-function screenArrow(c2,px,py,dx,dy){
-  const len=Math.hypot(dx,dy); if(len<0.01)return;
-  const ux=dx/len,uy=dy/len,sz=ARROW;
-  c2.beginPath();
-  c2.moveTo(px,py);
-  c2.lineTo(px-ux*sz+uy*sz*0.4,py-uy*sz-ux*sz*0.4);
-  c2.lineTo(px-ux*sz-uy*sz*0.4,py-uy*sz+ux*sz*0.4);
-  c2.closePath();c2.fill();
-}
-
-function drawLinearDim(c2,e,col){
-  const dx=e.x2-e.x1,dy=e.y2-e.y1;
-  const isH=Math.abs(dx)>=Math.abs(dy);
-  const off=e.cx||30;
-  let d1x,d1y,d2x,d2y;
-  if(e.type==='dimali'){
-    const len=Math.hypot(dx,dy)||1;
-    const ux=dx/len,uy=dy/len,px=-uy,py=ux;
-    d1x=e.x1+px*off;d1y=e.y1+py*off;d2x=e.x2+px*off;d2y=e.y2+py*off;
-  } else {
-    if(isH){const dY=(e.y1+e.y2)/2-off;d1x=e.x1;d1y=dY;d2x=e.x2;d2y=dY;}
-    else    {const dX=(e.x1+e.x2)/2-off;d1x=dX;d1y=e.y1;d2x=dX;d2y=e.y2;}
-  }
-  const[sx1,sy1]=w2s(e.x1,e.y1),[sx2,sy2]=w2s(e.x2,e.y2);
-  const[sd1x,sd1y]=w2s(d1x,d1y),[sd2x,sd2y]=w2s(d2x,d2y);
-  c2.save();c2.strokeStyle=col;c2.fillStyle=col;c2.lineWidth=1;
-  c2.beginPath();c2.moveTo(sx1,sy1);c2.lineTo(sd1x,sd1y);c2.stroke();
-  c2.beginPath();c2.moveTo(sx2,sy2);c2.lineTo(sd2x,sd2y);c2.stroke();
-  c2.beginPath();c2.moveTo(sd1x,sd1y);c2.lineTo(sd2x,sd2y);c2.stroke();
-  screenArrow(c2,sd1x,sd1y,sd2x-sd1x,sd2y-sd1y);
-  screenArrow(c2,sd2x,sd2y,sd1x-sd2x,sd1y-sd2y);
-  const val=Math.hypot(e.x2-e.x1,e.y2-e.y1).toFixed(2);
-  c2.font='11px sans-serif';c2.textAlign='center';
-  c2.fillText(val,(sd1x+sd2x)/2,(sd1y+sd2y)/2-5);
-  c2.restore();
-}
-
-function drawAngularDim(c2,e,col){
-  const ang1=Math.atan2(e.y1-e.cy,e.x1-e.cx);
-  const ang2=Math.atan2(e.y2-e.cy,e.x2-e.cx);
-  let span=ang2-ang1; if(span<0)span+=2*Math.PI;
-  const r=(e.r||30)*zoom;
-  const[csx,csy]=w2s(e.cx,e.cy);
-  c2.save();c2.strokeStyle=col;c2.fillStyle=col;c2.lineWidth=1;
-  c2.beginPath();c2.arc(csx,csy,r,-ang1,-(ang1+span),span>Math.PI);c2.stroke();
-  c2.beginPath();c2.moveTo(csx,csy);c2.lineTo(csx+Math.cos(ang1)*r,csy-Math.sin(ang1)*r);c2.stroke();
-  c2.beginPath();c2.moveTo(csx,csy);c2.lineTo(csx+Math.cos(ang2)*r,csy-Math.sin(ang2)*r);c2.stroke();
-  const midAng=ang1+span/2;
-  c2.font='11px sans-serif';c2.textAlign='center';
-  c2.fillText(`${(span*180/Math.PI).toFixed(1)}°`,
-    csx+Math.cos(midAng)*r*1.3,csy-Math.sin(midAng)*r*1.3);
-  c2.restore();
-}
-
-function drawRadialDim(c2,e,col,diameter){
-  const ang=(e.rotDeg||0)*Math.PI/180;
-  const[csx,csy]=w2s(e.cx,e.cy);
-  const rx=csx+Math.cos(ang)*e.r*zoom, ry=csy-Math.sin(ang)*e.r*zoom;
-  c2.save();c2.strokeStyle=col;c2.fillStyle=col;c2.lineWidth=1;
-  if(diameter){
-    const rx2=csx-Math.cos(ang)*e.r*zoom,ry2=csy+Math.sin(ang)*e.r*zoom;
-    c2.beginPath();c2.moveTo(rx,ry);c2.lineTo(rx2,ry2);c2.stroke();
-    screenArrow(c2,rx,ry,rx-rx2,ry-ry2);screenArrow(c2,rx2,ry2,rx2-rx,ry2-ry);
-    c2.font='11px sans-serif';c2.textAlign='center';
-    c2.fillText(`⌀${(2*e.r).toFixed(2)}`,csx+Math.cos(ang)*e.r*zoom*1.5,csy-Math.sin(ang)*e.r*zoom*1.5);
-  } else {
-    c2.beginPath();c2.moveTo(csx,csy);c2.lineTo(rx,ry);c2.stroke();
-    screenArrow(c2,rx,ry,rx-csx,ry-csy);
-    c2.font='11px sans-serif';c2.textAlign='center';
-    c2.fillText(`R${e.r.toFixed(2)}`,csx+Math.cos(ang)*e.r*zoom*1.5,csy-Math.sin(ang)*e.r*zoom*1.5);
-  }
-  c2.restore();
-}
-
-// ── Rubber-band preview ───────────────────────────────────────────────────────
-function drawPreview(){
-  if(!tempPt||clicks.length===0) return;
-  ctx.save();
-  ctx.strokeStyle='rgba(0,120,212,0.7)';
-  ctx.fillStyle='rgba(0,120,212,0.7)';
-  ctx.lineWidth=1;ctx.setLineDash([4,4]);
-  const pt=w2s(tempPt[0],tempPt[1]);
-  const c0=clicks.length>0?w2s(clicks[0][0],clicks[0][1]):null;
-  const c1=clicks.length>1?w2s(clicks[1][0],clicks[1][1]):null;
-
-  switch(currentTool){
-    case 'line':
-      if(c0){ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();} break;
-    case 'circle':
-      if(c0){const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();} break;
-    case 'arc':
-      if(c0&&!c1){const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();}
-      else if(c0&&c1){const r=Math.hypot(c1[0]-c0[0],c1[1]-c0[1]);
-        ctx.beginPath();ctx.arc(c0[0],c0[1],r,Math.atan2(c1[1]-c0[1],c1[0]-c0[0]),Math.atan2(pt[1]-c0[1],pt[0]-c0[0]));ctx.stroke();} break;
-    case 'rect':
-      if(c0){ctx.beginPath();ctx.rect(Math.min(c0[0],pt[0]),Math.min(c0[1],pt[1]),Math.abs(pt[0]-c0[0]),Math.abs(pt[1]-c0[1]));ctx.stroke();} break;
-    case 'poly':{
-      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
-      drawPolylineScrPts(ctx,all); break;
-    }
-    case 'spline':{
-      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
-      if(all.length>=4) drawBezierSpline(ctx,all); else drawPolylineScrPts(ctx,all); break;
-    }
-    case 'nurbs':{
-      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
-      if(all.length>=4){
-        // Preview NURBS in screen space (world-space control pts → screen).
-        const wPts=[...clicks,tempPt];
-        const n=wPts.length, deg=Math.min(3,n-1);
-        const knots=clampedUniformKnots(n,deg);
-        const lo=knots[deg],hi=knots[n];
-        const samples=Math.max(50,n*15);
-        ctx.beginPath();
-        for(let k=0;k<=samples;k++){
-          let t=lo+(k/samples)*(hi-lo);
-          if(t>=hi)t=hi-1e-10;
-          const[wx,wy]=nurbsEval(deg,wPts,knots,null,t);
-          const[sx,sy]=w2s(wx,wy);
-          if(k===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
-        }
-        ctx.stroke();
-      } else drawPolylineScrPts(ctx,all);
-      break;
-    }
-    case 'ellipse':
-      if(c0&&!c1){const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();}
-      else if(c0&&c1){const a=Math.hypot(c1[0]-c0[0],c1[1]-c0[1]),b=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]),rot=Math.atan2(c1[1]-c0[1],c1[0]-c0[0]);
-        ctx.beginPath();ctx.ellipse(c0[0],c0[1],a,b,rot,0,2*Math.PI);ctx.stroke();} break;
-    case 'dimlin':case 'dimali':
-      if(c0){ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();} break;
-    case 'dimang':
-      if(c0){ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();} break;
-    case 'dimrad':case 'dimdia':
-      if(c0){const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
-        ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();} break;
-    // Task #7 previews
-    case 'hatch':case 'revcloud':case 'wipeout':{
-      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
-      if(all.length>=2) drawPolylineScrPts(ctx,all);
-      if(all.length>=3){
-        ctx.setLineDash([2,4]);
-        ctx.beginPath();ctx.moveTo(all[all.length-1][0],all[all.length-1][1]);ctx.lineTo(all[0][0],all[0][1]);ctx.stroke();
-      }
-      break;
-    }
-    case 'leader':{
-      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
-      drawPolylineScrPts(ctx,all); break;
-    }
-  }
-  // Click markers
-  clicks.forEach(([wx,wy])=>{
-    const[sx,sy]=w2s(wx,wy);
-    ctx.setLineDash([]);ctx.beginPath();ctx.arc(sx,sy,3,0,2*Math.PI);ctx.fill();
-  });
-  ctx.restore();
-}
-
-// ─── Initialise ───────────────────────────────────────────────────────────────
-(async()=>{
-  resize();
-  try {
-    await new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      s.src='wasm_exec.js';s.onload=res;s.onerror=rej;
-      document.head.appendChild(s);
-    });
-    await loadWASM();
-  } catch(err) {
-    installDemoStubs();
-    setStatus('Demo mode — serve wasm_exec.js + main.wasm alongside this file for full WASM mode');
-  }
-  loadSnapSettings();  // restore snap mode checkboxes + enabled state from localStorage (Task #5)
-  refreshLayerSel();   // populate layer dropdown (Task #5)
-  updateSnapBtn();     // set initial snap button state (Task #5)
-  render();
-  setTool('line');
-})();
+// Refresh blocks button
+document.getElementById('btn-refresh-blocks')?.addEventListener('click', () => {
+  if (!state.wasmReady) return;
+  const blocks   = JSON.parse(window.cadGetBlocks() || '[]');
+  const blockLib = document.getElementById('block-library-content');
+  if (!blockLib) return;
+  blockLib.innerHTML = blocks.length
+    ? blocks.map(b => `<div class="block-lib-item"><span style="font-size:11px">${b.name}</span></div>`).join('')
+    : '<div style="color:var(--text-dim);font-size:11px">(no blocks)</div>';
+});
 </script>
+
 </body>
 </html>

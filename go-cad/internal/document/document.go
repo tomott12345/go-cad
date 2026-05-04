@@ -559,6 +559,45 @@ func (d *Document) AddWipeout(pts [][]float64, layer int, color string) int {
         })
 }
 
+// ─── SetEntityProp ────────────────────────────────────────────────────────────
+
+// SetEntityProp updates a single named field of an entity in-place and pushes
+// an undo snapshot. Returns false if the entity or field is not found.
+func (d *Document) SetEntityProp(id int, field, value string) bool {
+        for i := range d.entities {
+                if d.entities[i].ID != id {
+                        continue
+                }
+                d.pushUndo()
+                e := &d.entities[i]
+                switch field {
+                case "color":
+                        e.Color = value
+                case "layer":
+                        var n int
+                        if _, err := fmt.Sscanf(value, "%d", &n); err == nil {
+                                e.Layer = n
+                        }
+                case "text":
+                        e.Text = value
+                case "rotDeg":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.RotDeg = f
+                        }
+                case "textHeight":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.TextHeight = f
+                        }
+                default:
+                        return false
+                }
+                return true
+        }
+        return false
+}
+
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 func (d *Document) DeleteEntity(id int) bool {
