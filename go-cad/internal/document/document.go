@@ -582,6 +582,42 @@ func (d *Document) Load(path string) error {
         return nil
 }
 
+// ─── DXF import ───────────────────────────────────────────────────────────────
+
+// LoadDXFBytes parses a DXF text payload (R12 or R2000) and replaces the
+// current document's entities and layers with what was parsed. The previous
+// state is pushed onto the undo stack so the import can be undone.
+//
+// It delegates to pkg/dxf.Read; the import is done via a function variable so
+// that the internal/document package does not depend on pkg/dxf (avoiding a
+// circular import). Call document.RegisterDXFReader from cmd/wasm or cmd/cad
+// to wire the implementation.
+func (d *Document) LoadDXFBytes(data []byte) (warnings []string, err error) {
+        if dxfReader == nil {
+                return nil, fmt.Errorf("document.LoadDXFBytes: no DXF reader registered (call document.RegisterDXFReader)")
+        }
+        imported, warns, err := dxfReader(data)
+        if err != nil {
+                return warns, fmt.Errorf("document.LoadDXFBytes: %w", err)
+        }
+        d.pushUndo()
+        d.entities = imported.entities
+        d.nextID = imported.nextID
+        d.layers = imported.layers
+        d.nextLayerID = imported.nextLayerID
+        d.curLayer = 0
+        return warns, nil
+}
+
+// dxfReader is set by RegisterDXFReader to break the import cycle.
+var dxfReader func([]byte) (*Document, []string, error)
+
+// RegisterDXFReader registers the DXF parsing function. Must be called once at
+// startup (typically in cmd/wasm/main.go init() or cmd/cad/main.go).
+func RegisterDXFReader(fn func([]byte) (*Document, []string, error)) {
+        dxfReader = fn
+}
+
 // ─── DXF export ───────────────────────────────────────────────────────────────
 
 // ExportDXF returns a DXF R2000 (AC1015) string for all entities.

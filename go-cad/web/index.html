@@ -117,13 +117,17 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 
   <div class="sep"></div>
 
+  <!-- File ops (Task #6) -->
+  <button id="btn-open"    title="Open DXF file (Ctrl+O)">Open…</button>
+  <input id="file-input" type="file" accept=".dxf" style="display:none">
+
   <!-- Ops -->
   <button id="btn-undo"    title="Undo (Ctrl+Z)">Undo</button>
   <button id="btn-redo"    title="Redo (Ctrl+Y)">Redo</button>
   <button id="btn-del"     title="Delete selected (Del)">Delete</button>
   <button id="btn-clear"   title="Clear all">Clear</button>
   <button id="btn-zoomfit" title="Zoom to fit (ZF)">Fit</button>
-  <button id="btn-export"  title="Export DXF">Export</button>
+  <button id="btn-export"  title="Export in selected format">Export</button>
 
   <div class="sep"></div>
 
@@ -157,9 +161,10 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
   <select id="layer-sel" title="Current drawing layer"></select>
   <button id="btn-layers" title="Layer Manager…">Layers…</button>
   <input type="color" id="color-inp" value="#00ff00" title="Entity colour">
-  <select id="export-fmt" title="DXF export format">
-    <option value="r2000">R2000</option>
-    <option value="r12">R12</option>
+  <select id="export-fmt" title="Export format">
+    <option value="r2000">DXF R2000</option>
+    <option value="r12">DXF R12</option>
+    <option value="svg">SVG</option>
   </select>
 </div>
 
@@ -275,6 +280,31 @@ function installDemoStubs() {
   window.cadSetLayerLineType  = (id,lt) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineType=lt; return !!l; };
   window.cadSetLayerLineWeight= (id,lw) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineWeight=lw; return !!l; };
   window.cadSetLayerPrint     = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.printEnabled=v; return !!l; };
+  // ── Task #6 stubs ────────────────────────────────────────────────────────────
+  window.cadLoadDXF = (dxfStr) => {
+    try {
+      const lines=dxfStr.split('\n');
+      let cnt=0;
+      for(let i=0;i<lines.length;i++){
+        if(lines[i].trim()==='0'&&i+1<lines.length){
+          const t=lines[i+1].trim().toUpperCase();
+          if(['LINE','CIRCLE','ARC','LWPOLYLINE','POLYLINE','SPLINE','ELLIPSE','TEXT','MTEXT'].includes(t)) cnt++;
+        }
+      }
+      return JSON.stringify({ok:true,count:cnt,warnings:[]});
+    } catch(e) {
+      return JSON.stringify({ok:false,error:e.message});
+    }
+  };
+  window.cadExportSVG = () => {
+    const w=800,h=600;
+    let paths='';
+    ents.forEach(e=>{
+      if(e.type==='line') paths+=`<line x1="${e.x1||0}" y1="${e.y1||0}" x2="${e.x2||0}" y2="${e.y2||0}" stroke="${e.color||'white'}" stroke-width="1"/>`;
+      else if(e.type==='circle') paths+=`<circle cx="${e.cx||0}" cy="${e.cy||0}" r="${e.r||0}" fill="none" stroke="${e.color||'white'}" stroke-width="1"/>`;
+    });
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${paths}</svg>`;
+  };
   wasmReady = true;
 }
 
@@ -1019,6 +1049,7 @@ document.addEventListener('keydown', e=>{
   if(e.ctrlKey||e.metaKey){
     if(e.key==='z'){e.preventDefault();if(wasmReady)window.cadUndo();render();}
     if(e.key==='y'||e.key==='Y'){e.preventDefault();if(wasmReady)window.cadRedo();render();}
+    if(e.key==='o'||e.key==='O'){e.preventDefault();openDXFFile();}
     return;
   }
   // F3: toggle Object Snap (Task #5)
@@ -1074,12 +1105,59 @@ function entitySamplePoints(e){
 function exportDXF(){
   if(!wasmReady) return;
   const fmt=document.getElementById('export-fmt').value;
-  const dxf=fmt==='r12'?window.cadExportDXFR12():window.cadExportDXF();
+  let content, mime, ext;
+  if(fmt==='svg'){
+    content=window.cadExportSVG();
+    mime='image/svg+xml'; ext='svg';
+  } else if(fmt==='r12'){
+    content=window.cadExportDXFR12();
+    mime='text/plain'; ext='dxf';
+  } else {
+    content=window.cadExportDXF();
+    mime='text/plain'; ext='dxf';
+  }
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([dxf],{type:'text/plain'}));
-  a.download=`drawing_${fmt}.dxf`; a.click();
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=`drawing_${fmt}.${ext}`; a.click();
   URL.revokeObjectURL(a.href);
 }
+
+// ── Task #6: DXF import via file picker ───────────────────────────────────────
+function openDXFFile(){
+  document.getElementById('file-input').click();
+}
+
+document.getElementById('btn-open').addEventListener('click', openDXFFile);
+
+document.getElementById('file-input').addEventListener('change', function(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  if(!wasmReady){ setStatus('WASM not ready yet — try again.'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const dxfText = e.target.result;
+    let result;
+    try {
+      result = JSON.parse(window.cadLoadDXF(dxfText));
+    } catch(err) {
+      setStatus('DXF import failed: ' + err.message);
+      return;
+    }
+    if(!result.ok){
+      setStatus('DXF import error: ' + result.error);
+      return;
+    }
+    refreshLayers();
+    render();
+    zoomFit();
+    const warnTxt = result.warnings && result.warnings.length
+      ? ` (${result.warnings.length} warning${result.warnings.length>1?'s':''})` : '';
+    setStatus(`Loaded ${file.name}: ${result.count} entities${warnTxt}`);
+  };
+  reader.onerror = function(){ setStatus('Failed to read file.'); };
+  reader.readAsText(file);
+  ev.target.value=''; // allow re-opening same file
+});
 
 // ─── NURBS evaluator (JavaScript, for canvas rendering) ───────────────────────
 function nurbsBasis(i,k,knots,t){

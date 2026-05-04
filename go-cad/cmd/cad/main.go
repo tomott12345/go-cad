@@ -2,8 +2,8 @@
 //
 // It exposes the full document model (entities, layers) and object-snap engine
 // through an interactive Read-Eval-Print loop.  Users can draw entities, manage
-// layers, enable/disable individual snap modes, and export DXF — all without a
-// browser.
+// layers, enable/disable individual snap modes, export DXF/SVG, and import DXF
+// files — all without a browser.
 //
 // Usage:
 //
@@ -36,7 +36,9 @@
 //      FINDSNAP x y radius          – run snap query at world point (x,y) within radius
 //      SAVE file.json               – save document to JSON
 //      LOAD file.json               – load document from JSON
+//      IMPORT file.dxf              – import DXF file (replaces current drawing, undo-able)
 //      EXPORT file.dxf [r12]        – export DXF (default R2000; pass r12 for AutoCAD R12)
+//      EXPORTSVG file.svg           – export SVG (layers as <g> elements)
 //      HELP                         – show this help
 //      QUIT / EXIT                  – exit
 package main
@@ -50,7 +52,16 @@ import (
 
         "go-cad/internal/document"
         "go-cad/internal/snap"
+        "go-cad/pkg/dxf"
+        "go-cad/pkg/svg"
 )
+
+func init() {
+        // Wire the DXF reader into the document package to avoid import cycles.
+        document.RegisterDXFReader(func(data []byte) (*document.Document, []string, error) {
+                return dxf.Read(strings.NewReader(string(data)))
+        })
+}
 
 // ─── Snap settings ────────────────────────────────────────────────────────────
 
@@ -443,19 +454,40 @@ func main() {
                         fmt.Printf("loaded %d entities, %d layers from %s\n",
                                 len(doc.Entities()), len(doc.Layers()), args[0])
 
+                case "IMPORT":
+                        if len(args) < 1 {
+                                fmt.Println("usage: IMPORT file.dxf")
+                                continue
+                        }
+                        data, err := os.ReadFile(args[0])
+                        if err != nil {
+                                fmt.Println("read error:", err)
+                                continue
+                        }
+                        warns, err := doc.LoadDXFBytes(data)
+                        if err != nil {
+                                fmt.Println("import error:", err)
+                                continue
+                        }
+                        for _, w := range warns {
+                                fmt.Println("warn:", w)
+                        }
+                        fmt.Printf("imported %d entities, %d layers from %s\n",
+                                len(doc.Entities()), len(doc.Layers()), args[0])
+
                 case "EXPORT":
                         if len(args) < 1 {
                                 fmt.Println("usage: EXPORT file.dxf [r12]")
                                 continue
                         }
                         r12 := len(args) >= 2 && strings.ToLower(args[1]) == "r12"
-                        var dxf string
+                        var dxfStr string
                         if r12 {
-                                dxf = doc.ExportDXFR12()
+                                dxfStr = doc.ExportDXFR12()
                         } else {
-                                dxf = doc.ExportDXF()
+                                dxfStr = doc.ExportDXF()
                         }
-                        if err := os.WriteFile(args[0], []byte(dxf), 0644); err != nil {
+                        if err := os.WriteFile(args[0], []byte(dxfStr), 0644); err != nil {
                                 fmt.Println("write error:", err)
                                 continue
                         }
@@ -463,7 +495,25 @@ func main() {
                         if r12 {
                                 ver = "R12"
                         }
-                        fmt.Printf("exported %d bytes (%s) to %s\n", len(dxf), ver, args[0])
+                        fmt.Printf("exported %d bytes (%s) to %s\n", len(dxfStr), ver, args[0])
+
+                case "EXPORTSVG":
+                        if len(args) < 1 {
+                                fmt.Println("usage: EXPORTSVG file.svg")
+                                continue
+                        }
+                        f, err := os.Create(args[0])
+                        if err != nil {
+                                fmt.Println("create error:", err)
+                                continue
+                        }
+                        werr := svg.Write(doc, f)
+                        ferr := f.Close()
+                        if werr != nil || ferr != nil {
+                                fmt.Println("write error:", werr, ferr)
+                                continue
+                        }
+                        fmt.Printf("exported SVG to %s\n", args[0])
 
                 default:
                         fmt.Printf("unknown command %q — type HELP\n", cmd)

@@ -2,21 +2,26 @@
 
 // cmd/wasm is the browser WebAssembly entry point for go-cad.
 // It exposes a stable JavaScript API covering all entity types, undo/redo,
-// DXF export (both R12 and R2000), and geometry engine queries.
-//
-// NOTE: cmd/cad (Fyne desktop) is tracked separately and is not implemented
-// here because it requires the fyne.io/fyne/v2 external dependency, which
-// is deliberately excluded from this module's pure-stdlib constraint.
-// See: docs/architecture.md §6 "Desktop Frontend" for the re-scoping rationale.
+// DXF import/export (R12 and R2000), SVG export, and geometry engine queries.
 package main
 
 import (
         "encoding/json"
+        "strings"
         "syscall/js"
 
         "go-cad/internal/document"
         "go-cad/internal/snap"
+        "go-cad/pkg/dxf"
+        "go-cad/pkg/svg"
 )
+
+func init() {
+        // Wire the DXF reader into the document package (breaks import cycle).
+        document.RegisterDXFReader(func(data []byte) (*document.Document, []string, error) {
+                return dxf.Read(strings.NewReader(string(data)))
+        })
+}
 
 var doc = document.New()
 
@@ -247,6 +252,37 @@ func main() {
         // LINE/CIRCLE/ARC/TEXT/POLYLINE+VERTEX primitives.
         js.Global().Set("cadExportDXFR12", js.FuncOf(func(_ js.Value, _ []js.Value) any {
                 return doc.ExportDXFR12()
+        }))
+
+        // cadLoadDXF(dxfString) → JSON {"ok":true,"count":N,"warnings":[…]} or {"ok":false,"error":"…"}
+        // Parses a DXF R12 or R2000 text string, replaces the current document's
+        // entities and layers, and returns the new entity count. The previous state
+        // is pushed to the undo stack so the import can be undone with Ctrl+Z.
+        js.Global().Set("cadLoadDXF", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 1 {
+                        b, _ := json.Marshal(map[string]any{"ok": false, "error": "no DXF string provided"})
+                        return string(b)
+                }
+                warns, err := doc.LoadDXFBytes([]byte(a[0].String()))
+                if err != nil {
+                        b, _ := json.Marshal(map[string]any{"ok": false, "error": err.Error()})
+                        return string(b)
+                }
+                b, _ := json.Marshal(map[string]any{
+                        "ok":       true,
+                        "count":    doc.EntityCount(),
+                        "warnings": warns,
+                })
+                return string(b)
+        }))
+
+        // cadExportSVG() → SVG string (grouped by layer, dash patterns from line types).
+        js.Global().Set("cadExportSVG", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+                s, err := svg.Generate(doc)
+                if err != nil {
+                        return ""
+                }
+                return s
         }))
 
         // ── Geometry engine ───────────────────────────────────────────────────────
