@@ -60,6 +60,21 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 
   <div class="sep"></div>
 
+  <!-- Edit operations (Task #4) -->
+  <button id="tool-move"       title="Move (M) — select entity, type: MOVE dx dy">Move</button>
+  <button id="tool-copy"       title="Copy (CP) — select entity, type: COPY dx dy">Copy</button>
+  <button id="tool-rotate"     title="Rotate (RO) — select entity, type: ROTATE angle [cx cy]">Rotate</button>
+  <button id="tool-scale"      title="Scale (SC) — select entity, type: SCALE factor [cx cy]">Scale</button>
+  <button id="tool-mirror"     title="Mirror (MI) — click two pts on mirror axis">Mirror</button>
+  <button id="tool-trim"       title="Trim (TR) — click cutter, then part to remove">Trim</button>
+  <button id="tool-extend"     title="Extend (EX) — click boundary, then end to extend">Extend</button>
+  <button id="tool-fillet"     title="Fillet (F) — select two lines, type: FILLET radius">Fillet</button>
+  <button id="tool-chamfer"    title="Chamfer (CHA) — select two lines, type: CHAMFER d1 d2">Chamfer</button>
+  <button id="tool-arrayrect"  title="Rect Array (AR) — select entity, type: ARRAYRECT rows cols dy dx">ArrayRect</button>
+  <button id="tool-arraypolar" title="Polar Array (AP) — select entity, type: ARRAYPOLAR count angle [cx cy]">ArrayPolar</button>
+
+  <div class="sep"></div>
+
   <!-- Ops -->
   <button id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
   <button id="btn-redo"   title="Redo (Ctrl+Y)">Redo</button>
@@ -132,7 +147,19 @@ function installDemoStubs() {
   window.cadEntities       = () => JSON.stringify(ents);
   window.cadExportDXF      = () => '  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n  0\nEOF\n';
   window.cadExportDXFR12   = () => window.cadExportDXF();
-  window.cadNearestEntity  = () => 0;
+  window.cadNearestEntity  = (x,y,r) => { let best=0,bestD=r||Infinity; ents.forEach(e=>{const d=Math.hypot((e.cx||e.x1||0)-x,(e.cy||e.y1||0)-y);if(d<bestD){bestD=d;best=e.id;}}); return best; };
+  // ── Edit op stubs (demo mode) ────────────────────────────────────────────────
+  window.cadMove        = (ids,dx,dy) => { ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){e.x1+=dx;e.y1+=dy;}if(e.x2!=null){e.x2+=dx;e.y2+=dy;}if(e.cx!=null){e.cx+=dx;e.cy+=dy;}if(e.points)e.points=e.points.map(p=>[p[0]+dx,p[1]+dy]);}); return true; };
+  window.cadCopy        = (ids,dx,dy) => ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){ne.x1+=dx;ne.y1+=dy;}if(ne.x2!=null){ne.x2+=dx;ne.y2+=dy;}if(ne.cx!=null){ne.cx+=dx;ne.cy+=dy;}if(ne.points)ne.points=ne.points.map(p=>[p[0]+dx,p[1]+dy]);ents.push(ne);return ne.id;});
+  window.cadRotate      = (ids,cx,cy,ang,mc) => { const r=ang*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r); const rot=(x,y)=>[cx+(x-cx)*cs-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*cs]; if(mc){return ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=rot(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=rot(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=rot(ne.cx,ne.cy);}ents.push(ne);return ne.id;});}else{ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){[e.x1,e.y1]=rot(e.x1,e.y1);}if(e.x2!=null){[e.x2,e.y2]=rot(e.x2,e.y2);}if(e.cx!=null){[e.cx,e.cy]=rot(e.cx,e.cy);}});return ids;} };
+  window.cadScale       = (ids,cx,cy,sx,sy,mc) => { const sc=(x,y)=>[cx+(x-cx)*sx,cy+(y-cy)*sy]; if(mc){return ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=sc(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=sc(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=sc(ne.cx,ne.cy);ne.r*=Math.sqrt(Math.abs(sx*sy));}ents.push(ne);return ne.id;});}else{ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){[e.x1,e.y1]=sc(e.x1,e.y1);}if(e.x2!=null){[e.x2,e.y2]=sc(e.x2,e.y2);}if(e.cx!=null){[e.cx,e.cy]=sc(e.cx,e.cy);e.r*=Math.sqrt(Math.abs(sx*sy));}});return ids;} };
+  window.cadMirror      = (ids,ax,ay,bx,by,mc) => { const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy; const mir=(x,y)=>{const t=((x-ax)*dx+(y-ay)*dy)/l2;return[2*(ax+t*dx)-x,2*(ay+t*dy)-y];}; if(mc){return ids.map(id=>{const e=ents.find(e=>e.id===id);if(!e)return -1;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=mir(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=mir(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=mir(ne.cx,ne.cy);}ents.push(ne);return ne.id;});}else{ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;if(e.x1!=null){[e.x1,e.y1]=mir(e.x1,e.y1);}if(e.x2!=null){[e.x2,e.y2]=mir(e.x2,e.y2);}if(e.cx!=null){[e.cx,e.cy]=mir(e.cx,e.cy);}});return ids;} };
+  window.cadTrim        = () => 'null';
+  window.cadExtend      = () => -1;
+  window.cadFillet      = () => -1;
+  window.cadChamfer     = () => -1;
+  window.cadArrayRect   = (ids,rows,cols,rs,cs) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){if(r===0&&c===0)continue;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){ne.x1+=c*cs;ne.y1+=r*rs;}if(ne.x2!=null){ne.x2+=c*cs;ne.y2+=r*rs;}if(ne.cx!=null){ne.cx+=c*cs;ne.cy+=r*rs;}if(ne.points)ne.points=ne.points.map(p=>[p[0]+c*cs,p[1]+r*rs]);ents.push(ne);out.push(ne.id);}}); return out; };
+  window.cadArrayPolar  = (ids,cx,cy,count,ang) => { const out=[],step=ang/count; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let i=1;i<count;i++){const r=i*step*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r);const rot=(x,y)=>[cx+(x-cx)*cs-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*cs];const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=rot(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=rot(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=rot(ne.cx,ne.cy);}if(ne.points)ne.points=ne.points.map(p=>rot(p[0],p[1]));ents.push(ne);out.push(ne.id);}}); return out; };
   wasmReady = true;
 }
 
@@ -161,6 +188,7 @@ let selectedId = 0;
 let currentLayer = 0;
 let currentColor = '#00ff00';
 let pendingText  = null;  // set by command bar for text/mtext tools
+let editPickIds  = [];    // multi-entity pick buffer for edit ops (trim/extend/fillet/chamfer/mirror)
 
 const toolClicks = {
   line:2, circle:2, arc:3, rect:2,
@@ -168,6 +196,13 @@ const toolClicks = {
   ellipse:3,
   text:1, mtext:1,
   dimlin:3, dimali:3, dimang:4, dimrad:2, dimdia:2,
+  // Edit ops — click-driven (varies; see handleEditClick below)
+  move:-99, copy:-99, rotate:-99, scale:-99,
+  mirror:2,      // 2 pts on mirror axis
+  trim:2,        // click cutter entity, click on part to remove
+  extend:2,      // click boundary entity, click near end to extend
+  fillet:-99, chamfer:-99,
+  arrayrect:-99, arraypolar:-99,
 };
 
 const toolHints = {
@@ -186,10 +221,22 @@ const toolHints = {
   dimang:  'Click vertex, first ray point, second ray point, arc-radius click.',
   dimrad:  'Click centre, circumference point.',
   dimdia:  'Click centre, circumference point.',
+  // ── Edit ops ────────────────────────────────────────────────────────────────
+  move:       'Select entity, then type: MOVE dx dy  (e.g. MOVE 10 5)',
+  copy:       'Select entity, then type: COPY dx dy  (e.g. COPY 10 0)',
+  rotate:     'Select entity, then type: ROTATE angle  (e.g. ROTATE 45)  or ROTATE angle cx cy',
+  scale:      'Select entity, then type: SCALE factor  (e.g. SCALE 2)  or SCALE sx sy cx cy',
+  mirror:     'Click first point on mirror axis, then second point on mirror axis.',
+  trim:       'Click the cutting entity, then click the part of the target to remove.',
+  extend:     'Click the boundary entity, then click near the end of the entity to extend.',
+  fillet:     'Select first line, then type: FILLET radius  (e.g. FILLET 5) — then click second line.',
+  chamfer:    'Select first line, then type: CHAMFER d1 d2  (e.g. CHAMFER 3 3) — then click second line.',
+  arrayrect:  'Select entity, then type: ARRAYRECT rows cols rowSpacing colSpacing',
+  arraypolar: 'Select entity, then type: ARRAYPOLAR count totalAngleDeg [cx cy]',
 };
 
 function setTool(name){
-  currentTool=name; clicks=[]; tempPt=null; pendingText=null;
+  currentTool=name; clicks=[]; tempPt=null; pendingText=null; editPickIds=[];
   document.querySelectorAll('#toolbar button[id^="tool-"]').forEach(b=>{
     b.classList.toggle('active', b.id==='tool-'+name);
   });
@@ -277,6 +324,80 @@ canvas.addEventListener('mousedown', e=>{
     setStatus('Type your text in the command bar and press Enter.');
     return;
   }
+
+  // ── Edit tools with special click workflows ──────────────────────────────
+  if(currentTool==='mirror'){
+    clicks.push([wx,wy]);
+    if(clicks.length>=2){
+      if(wasmReady&&selectedId){
+        window.cadMirror([selectedId],clicks[0][0],clicks[0][1],clicks[1][0],clicks[1][1],false);
+        setStatus('Mirror applied.');
+      } else setStatus('Mirror: no entity selected.');
+      clicks=[];
+    } else {
+      setStatus('Mirror: click second point on the mirror axis.');
+    }
+    render(); return;
+  }
+  if(currentTool==='trim'){
+    if(editPickIds.length===0){
+      const cutterID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
+      if(cutterID){
+        editPickIds=[cutterID]; selectedId=cutterID;
+        setStatus(`Trim: cutter selected (ID ${cutterID}). Click the part to remove.`);
+      } else setStatus('Trim: no entity near click — try again.');
+    } else {
+      const cutter=editPickIds[0];
+      const targetID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
+      if(targetID&&targetID!==cutter){
+        const res=JSON.parse(window.cadTrim(cutter,targetID,wx,wy)||'null');
+        setStatus(res?`Trim OK (${res.length} piece(s) kept).`:'Trim: no intersection found.');
+        editPickIds=[];
+      } else setStatus('Trim: click a different entity to trim.');
+    }
+    render(); return;
+  }
+  if(currentTool==='extend'){
+    if(editPickIds.length===0){
+      const boundID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
+      if(boundID){
+        editPickIds=[boundID]; selectedId=boundID;
+        setStatus(`Extend: boundary selected (ID ${boundID}). Click near the end to extend.`);
+      } else setStatus('Extend: no entity near click — try again.');
+    } else {
+      const bound=editPickIds[0];
+      const targetID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
+      if(targetID&&targetID!==bound){
+        const newID=window.cadExtend(bound,targetID,wx,wy);
+        setStatus(newID>=0?`Extend OK (entity ${newID}).`:'Extend: no intersection found.');
+        editPickIds=[];
+      } else setStatus('Extend: click a different entity to extend.');
+    }
+    render(); return;
+  }
+  if(currentTool==='fillet'&&editPickIds.length>=2){
+    // editPickIds = [firstLineID, radius]
+    const secondID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
+    if(secondID&&secondID!==editPickIds[0]){
+      const arcID=window.cadFillet(editPickIds[0],secondID,editPickIds[1]||5);
+      setStatus(arcID>=0?`Fillet OK (arc ID ${arcID}).`:'Fillet: failed — lines must intersect/be close.');
+    } else setStatus('Fillet: click a different line entity.');
+    editPickIds=[]; setTool('line'); render(); return;
+  }
+  if(currentTool==='chamfer'&&editPickIds.length>=3){
+    // editPickIds = [firstLineID, d1, d2]
+    const secondID=wasmReady?window.cadNearestEntity(wx,wy,50/zoom):0;
+    if(secondID&&secondID!==editPickIds[0]){
+      const lineID=window.cadChamfer(editPickIds[0],secondID,editPickIds[1],editPickIds[2]);
+      setStatus(lineID>=0?`Chamfer OK (line ID ${lineID}).`:'Chamfer: failed — lines must intersect/be close.');
+    } else setStatus('Chamfer: click a different line entity.');
+    editPickIds=[]; setTool('line'); render(); return;
+  }
+  // ── Suppress clicks for command-bar-only edit tools ─────────────────────
+  if([-99].includes(toolClicks[currentTool])){
+    render(); return;
+  }
+
   clicks.push([wx,wy]);
   const req=toolClicks[currentTool];
   if(req>0&&clicks.length>=req) commitEntity();
@@ -341,7 +462,83 @@ cmdInput.addEventListener('keydown', e=>{
     CLEAR:'clear',
     ZOOMFIT:'zoomfit',ZF:'zoomfit',Z:'zoomfit',
     EXPORT:'export',DXF:'export',
+    // ── Edit ops (Task #4) ────────────────────────────────────────────────────
+    MOVE:'move',M:'move',
+    COPY:'copy',CP:'copy',CO:'copy',
+    ROTATE:'rotate',RO:'rotate',
+    SCALE:'scale',SC:'scale',
+    MIRROR:'mirror',MI:'mirror',
+    TRIM:'trim',TR:'trim',
+    EXTEND:'extend',EX:'extend',
+    FILLET:'fillet',F:'fillet',
+    CHAMFER:'chamfer',CHA:'chamfer',
+    ARRAYRECT:'arrayrect',AR:'arrayrect',
+    ARRAYPOLAR:'arraypolar',AP:'arraypolar',
   };
+
+  // ── Handle parametric edit commands (MOVE dx dy, ROTATE angle, etc.) ─────
+  const parts = raw.trim().split(/\s+/);
+  const verb  = parts[0].toUpperCase();
+
+  if(wasmReady && selectedId && verb==='MOVE' && parts.length>=3){
+    const dx=parseFloat(parts[1]),dy=parseFloat(parts[2]);
+    window.cadMove([selectedId],dx,dy); render(); return;
+  }
+  if(wasmReady && selectedId && verb==='COPY' && parts.length>=3){
+    const dx=parseFloat(parts[1]),dy=parseFloat(parts[2]);
+    const newIDs=JSON.parse(window.cadCopy([selectedId],dx,dy)||'[]');
+    if(newIDs.length>0) selectedId=newIDs[0];
+    render(); return;
+  }
+  if(wasmReady && selectedId && verb==='ROTATE' && parts.length>=2){
+    const ang=parseFloat(parts[1]);
+    const cx=parts.length>=4?parseFloat(parts[2]):0;
+    const cy=parts.length>=4?parseFloat(parts[3]):0;
+    window.cadRotate([selectedId],cx,cy,ang,false); render(); return;
+  }
+  if(wasmReady && selectedId && verb==='SCALE' && parts.length>=2){
+    const sx=parseFloat(parts[1]);
+    const sy=parts.length>=3?parseFloat(parts[2]):sx;
+    const cx=parts.length>=5?parseFloat(parts[3]):0;
+    const cy=parts.length>=5?parseFloat(parts[4]):0;
+    window.cadScale([selectedId],cx,cy,sx,sy,false); render(); return;
+  }
+  if(wasmReady && (currentTool==='fillet') && editPickIds.length===1 && verb==='FILLET' && parts.length>=2){
+    // waiting for second line click, radius given via command
+    const r=parseFloat(parts[1]);
+    setStatus(`Fillet r=${r}: now click the second line.`);
+    editPickIds.push(r); // store radius temporarily at index 1
+    return;
+  }
+  if(wasmReady && selectedId && verb==='FILLET' && parts.length>=2){
+    const r=parseFloat(parts[1]);
+    // Store first line and radius; next click selects second line
+    editPickIds=[selectedId,r];
+    setTool('fillet');
+    setStatus(`Fillet r=${r}: click the second line.`);
+    return;
+  }
+  if(wasmReady && selectedId && verb==='CHAMFER' && parts.length>=3){
+    const d1=parseFloat(parts[1]),d2=parseFloat(parts[2]);
+    editPickIds=[selectedId,d1,d2];
+    setTool('chamfer');
+    setStatus(`Chamfer d1=${d1} d2=${d2}: click the second line.`);
+    return;
+  }
+  if(wasmReady && selectedId && verb==='ARRAYRECT' && parts.length>=5){
+    const rows=parseInt(parts[1]),cols=parseInt(parts[2]);
+    const rs=parseFloat(parts[3]),cs=parseFloat(parts[4]);
+    JSON.parse(window.cadArrayRect([selectedId],rows,cols,rs,cs)||'[]');
+    render(); return;
+  }
+  if(wasmReady && selectedId && verb==='ARRAYPOLAR' && parts.length>=3){
+    const count=parseInt(parts[1]),ang=parseFloat(parts[2]);
+    const cx=parts.length>=5?parseFloat(parts[3]):0;
+    const cy=parts.length>=5?parseFloat(parts[4]):0;
+    JSON.parse(window.cadArrayPolar([selectedId],cx,cy,count,ang)||'[]');
+    render(); return;
+  }
+
   const action=toolMap[cmd];
   if(!action){setStatus(`Unknown command: ${raw}`);return;}
   switch(action){
@@ -357,7 +554,9 @@ cmdInput.addEventListener('keydown', e=>{
 
 // ─── Toolbar buttons ──────────────────────────────────────────────────────────
 ['line','circle','arc','rect','poly','spline','nurbs','ellipse','text','mtext',
- 'dimlin','dimali','dimang','dimrad','dimdia'].forEach(t=>{
+ 'dimlin','dimali','dimang','dimrad','dimdia',
+ 'move','copy','rotate','scale','mirror','trim','extend','fillet','chamfer','arrayrect','arraypolar',
+].forEach(t=>{
   document.getElementById('tool-'+t).addEventListener('click',()=>setTool(t));
 });
 document.getElementById('btn-undo').addEventListener('click',()=>{if(wasmReady)window.cadUndo();render();});
