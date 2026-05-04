@@ -583,6 +583,30 @@ func main() {
                 return doc.SetLayerFrozen(a[0].Int(), a[1].Bool())
         }))
 
+        // cadSetLayerLineType(id, lineType) → bool   (lineType: "Solid"|"Dashed"|"Dotted"|"DashDot"|"Center"|"Hidden")
+        js.Global().Set("cadSetLayerLineType", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerLineType(a[0].Int(), document.LineType(a[1].String()))
+        }))
+
+        // cadSetLayerLineWeight(id, lineWeightMM) → bool
+        js.Global().Set("cadSetLayerLineWeight", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerLineWeight(a[0].Int(), a[1].Float())
+        }))
+
+        // cadSetLayerPrint(id, enabled) → bool
+        js.Global().Set("cadSetLayerPrint", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerPrint(a[0].Int(), a[1].Bool())
+        }))
+
         // cadGetCurrentLayer() → int
         js.Global().Set("cadGetCurrentLayer", js.FuncOf(func(_ js.Value, _ []js.Value) any {
                 return doc.CurrentLayer()

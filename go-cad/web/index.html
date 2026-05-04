@@ -40,6 +40,19 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 #layer-panel-footer button:hover{background:#505050}
 #layer-panel-footer button.primary{background:#0078d4;border-color:#0060a8;color:#fff}
 
+/* ── Snap Settings popover ───────────────────────────────────────────────── */
+#snap-settings{display:none;position:absolute;top:44px;left:0;background:#252525;border:1px solid #555;
+  border-radius:5px;padding:10px 14px;z-index:200;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+#snap-settings.open{display:block}
+#snap-settings h4{font-size:11px;color:#888;margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px}
+.snap-row{display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px;color:#ccc}
+.snap-row input{accent-color:#0078d4;cursor:pointer}
+.snap-swatch{width:10px;height:10px;border-radius:1px;flex-shrink:0}
+#snap-settings-footer{display:flex;gap:6px;margin-top:8px;padding-top:7px;border-top:1px solid #333}
+#snap-settings-footer button{flex:1;padding:3px 0;font-size:11px;border:1px solid #555;border-radius:3px;
+  background:#3a3a3a;color:#ccc;cursor:pointer}
+#snap-settings-footer button:hover{background:#505050}
+
 /* ── Snap marker overlay ─────────────────────────────────────────────────── */
 #snap-marker{position:absolute;pointer-events:none;display:none}
 #snap-marker svg{overflow:visible}
@@ -114,8 +127,28 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 
   <div class="sep"></div>
 
-  <!-- Snap (Task #5) -->
-  <button id="btn-snap" class="snap-on" title="Object Snap toggle (F3)">Snap ✓</button>
+  <!-- Snap (Task #5) — toggle + settings popover -->
+  <div style="position:relative">
+    <button id="btn-snap" class="snap-on" title="Object Snap toggle (F3)">Snap ✓</button>
+    <button id="btn-snap-settings" title="Snap settings"
+      style="padding:4px 6px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:11px">⚙</button>
+    <div id="snap-settings">
+      <h4>Object Snap Modes</h4>
+      <label class="snap-row"><input type="checkbox" id="snp-endpoint"      checked><span class="snap-swatch" style="background:#ff4444"></span>Endpoint</label>
+      <label class="snap-row"><input type="checkbox" id="snp-midpoint"      checked><span class="snap-swatch" style="background:#44ff44"></span>Midpoint</label>
+      <label class="snap-row"><input type="checkbox" id="snp-center"        checked><span class="snap-swatch" style="background:#4488ff"></span>Center</label>
+      <label class="snap-row"><input type="checkbox" id="snp-quadrant"      checked><span class="snap-swatch" style="background:#ffaa00"></span>Quadrant</label>
+      <label class="snap-row"><input type="checkbox" id="snp-intersection"  checked><span class="snap-swatch" style="background:#ff44ff"></span>Intersection</label>
+      <label class="snap-row"><input type="checkbox" id="snp-perpendicular" checked><span class="snap-swatch" style="background:#00ffff"></span>Perpendicular</label>
+      <label class="snap-row"><input type="checkbox" id="snp-tangent"       checked><span class="snap-swatch" style="background:#ffff44"></span>Tangent</label>
+      <label class="snap-row"><input type="checkbox" id="snp-nearest"       checked><span class="snap-swatch" style="background:#aaaaaa"></span>Nearest</label>
+      <div id="snap-settings-footer">
+        <button onclick="setAllSnapModes(true)">All</button>
+        <button onclick="setAllSnapModes(false)">None</button>
+        <button onclick="closeSnapSettings()">Close</button>
+      </div>
+    </div>
+  </div>
 
   <div class="sep"></div>
 
@@ -140,9 +173,10 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
       <table id="layer-table">
         <thead>
           <tr>
-            <th>Current</th><th>Name</th><th>Color</th>
+            <th>Cur</th><th>Name</th><th>Color</th><th>Line Type</th>
+            <th title="Line weight mm">LW</th>
             <th title="Visible">Vis</th><th title="Locked">Lck</th>
-            <th title="Frozen">Frz</th><th></th>
+            <th title="Frozen">Frz</th><th title="Print">Prt</th><th></th>
           </tr>
         </thead>
         <tbody id="layer-tbody"></tbody>
@@ -235,9 +269,12 @@ function installDemoStubs() {
   window.cadRemoveLayer      = id => { if(id===0)return false; const i=_stubLayers.findIndex(l=>l.id===id); if(i<0)return false; _stubLayers.splice(i,1); return true; };
   window.cadSetLayerName     = (id,n)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.name=n; return !!l; };
   window.cadSetLayerColor    = (id,c)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.color=c; return !!l; };
-  window.cadSetLayerVisible  = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.visible=v; return !!l; };
-  window.cadSetLayerLocked   = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.locked=v; return !!l; };
-  window.cadSetLayerFrozen   = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.frozen=v; render(); return !!l; };
+  window.cadSetLayerVisible   = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.visible=v; return !!l; };
+  window.cadSetLayerLocked    = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.locked=v; return !!l; };
+  window.cadSetLayerFrozen    = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.frozen=v; return !!l; };
+  window.cadSetLayerLineType  = (id,lt) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineType=lt; return !!l; };
+  window.cadSetLayerLineWeight= (id,lw) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineWeight=lw; return !!l; };
+  window.cadSetLayerPrint     = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.printEnabled=v; return !!l; };
   wasmReady = true;
 }
 
@@ -279,6 +316,57 @@ const snapColors = {
   Tangent:'#ffff44', Nearest:'#aaaaaa',
 };
 
+// ─── Snap mode bitmask (Task #5) ─────────────────────────────────────────────
+const SNAP_BITS = {
+  'snp-endpoint':1,'snp-midpoint':2,'snp-center':4,'snp-quadrant':8,
+  'snp-intersection':16,'snp-perpendicular':32,'snp-tangent':64,'snp-nearest':128,
+};
+
+function loadSnapSettings(){
+  try {
+    const saved = localStorage.getItem('gocad-snap');
+    if(saved){
+      const s=JSON.parse(saved);
+      snapEnabled = s.enabled!==false;
+      Object.entries(SNAP_BITS).forEach(([id])=>{
+        const el=document.getElementById(id);
+        if(el&&id in s) el.checked=s[id];
+      });
+    }
+  } catch(_){}
+}
+
+function saveSnapSettings(){
+  const s={enabled:snapEnabled};
+  Object.entries(SNAP_BITS).forEach(([id])=>{
+    const el=document.getElementById(id);
+    if(el) s[id]=el.checked;
+  });
+  try{ localStorage.setItem('gocad-snap',JSON.stringify(s)); } catch(_){}
+}
+
+function snapMask(){
+  let mask=0;
+  Object.entries(SNAP_BITS).forEach(([id,bit])=>{
+    const el=document.getElementById(id);
+    if(el&&el.checked) mask|=bit;
+  });
+  return mask;
+}
+
+function setAllSnapModes(on){
+  Object.keys(SNAP_BITS).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.checked=on;
+  });
+  saveSnapSettings();
+}
+
+function closeSnapSettings(){
+  document.getElementById('snap-settings').classList.remove('open');
+  saveSnapSettings();
+}
+
 function updateSnapBtn(){
   const b=document.getElementById('btn-snap');
   if(snapEnabled){b.className='snap-on';b.textContent='Snap ✓';}
@@ -288,7 +376,8 @@ function updateSnapBtn(){
 function snapWorldPt(wx, wy){
   if(!snapEnabled||!wasmReady) return [wx,wy];
   const worldRadius = SNAP_RADIUS_PX / zoom;
-  const raw = window.cadFindSnap(wx, wy, worldRadius, 0);
+  const mask = snapMask();
+  const raw = window.cadFindSnap(wx, wy, worldRadius, mask);
   if(!raw) { snapResult=null; return [wx,wy]; }
   snapResult = JSON.parse(raw);
   return [snapResult.x, snapResult.y];
@@ -365,6 +454,9 @@ function closeLayerManager(){
   refreshLayerSel();
 }
 
+const LT_OPTIONS = ['Solid','Dashed','Dotted','DashDot','Center','Hidden'];
+const LW_OPTIONS = [0.00,0.05,0.09,0.13,0.15,0.18,0.20,0.25,0.30,0.35,0.40,0.50,0.53,0.60,0.70,0.80,0.90,1.00,1.06,1.20,1.40,1.58,2.00,2.11];
+
 function refreshLayerTable(){
   if(!wasmReady) return;
   const layers = JSON.parse(window.cadGetLayers()||'[]');
@@ -377,21 +469,36 @@ function refreshLayerTable(){
           ${l.id===cur?'checked':''}
           onchange="if(wasmReady)window.cadSetCurrentLayer(${l.id});currentLayer=${l.id};refreshLayerSel()">
       </td>
-      <td><input type="text" value="${escH(l.name)}" style="width:100px"
-          onblur="if(wasmReady)window.cadSetLayerName(${l.id},this.value);refreshLayerTable()"></td>
+      <td><input type="text" value="${escH(l.name)}" style="width:90px"
+          onblur="if(wasmReady)window.cadSetLayerName(${l.id},this.value)"></td>
       <td><input type="color" value="${l.color}"
-          oninput="if(wasmReady)window.cadSetLayerColor(${l.id},this.value)"></td>
+          oninput="if(wasmReady)window.cadSetLayerColor(${l.id},this.value);render()"></td>
+      <td>
+        <select class="layer-check" style="background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:11px"
+          onchange="if(wasmReady)window.cadSetLayerLineType(${l.id},this.value);render()">
+          ${LT_OPTIONS.map(t=>`<option${t===l.lineType?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="layer-check" style="background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:11px;width:52px"
+          onchange="if(wasmReady)window.cadSetLayerLineWeight(${l.id},parseFloat(this.value))">
+          ${LW_OPTIONS.map(w=>`<option value="${w}"${Math.abs(w-l.lineWeight)<0.005?' selected':''}>${w.toFixed(2)}</option>`).join('')}
+        </select>
+      </td>
       <td style="text-align:center">
         <input type="checkbox" class="layer-check" ${l.visible?'checked':''}
-          onchange="if(wasmReady)window.cadSetLayerVisible(${l.id},this.checked)"></td>
+          onchange="if(wasmReady)window.cadSetLayerVisible(${l.id},this.checked);render()"></td>
       <td style="text-align:center">
         <input type="checkbox" class="layer-check" ${l.locked?'checked':''}
           onchange="if(wasmReady)window.cadSetLayerLocked(${l.id},this.checked)"></td>
       <td style="text-align:center">
         <input type="checkbox" class="layer-check" ${l.frozen?'checked':''}
           onchange="if(wasmReady)window.cadSetLayerFrozen(${l.id},this.checked);render()"></td>
+      <td style="text-align:center">
+        <input type="checkbox" class="layer-check" ${l.printEnabled?'checked':''}
+          onchange="if(wasmReady)window.cadSetLayerPrint(${l.id},this.checked)"></td>
       <td>${l.id!==0?`<button class="layer-btn layer-del"
-          onclick="if(wasmReady)window.cadRemoveLayer(${l.id});refreshLayerTable();refreshLayerSel()">✕</button>`:'—'}</td>
+          onclick="if(wasmReady)window.cadRemoveLayer(${l.id});refreshLayerTable();refreshLayerSel();render()">✕</button>`:'—'}</td>
     </tr>
   `).join('');
 }
@@ -833,11 +940,27 @@ document.getElementById('layer-sel').addEventListener('change',e=>{
 });
 document.getElementById('color-inp').addEventListener('input',e=>currentColor=e.target.value);
 
-// Snap toggle (Task #5)
+// Snap toggle + settings popover (Task #5)
 document.getElementById('btn-snap').addEventListener('click',()=>{
   snapEnabled=!snapEnabled; snapResult=null;
-  drawSnapMarker(); updateSnapBtn();
+  drawSnapMarker(); updateSnapBtn(); saveSnapSettings();
   setStatus(snapEnabled?'Object Snap ON (F3 to toggle)':'Object Snap OFF (F3 to toggle)');
+});
+document.getElementById('btn-snap-settings').addEventListener('click',e=>{
+  e.stopPropagation();
+  document.getElementById('snap-settings').classList.toggle('open');
+});
+// Close snap settings when clicking outside
+document.addEventListener('click',e=>{
+  const panel=document.getElementById('snap-settings');
+  if(panel.classList.contains('open')&&!panel.contains(e.target)&&e.target.id!=='btn-snap-settings'){
+    closeSnapSettings();
+  }
+});
+// Auto-save snap settings when individual mode checkboxes change
+Object.keys(SNAP_BITS).forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('change',saveSnapSettings);
 });
 
 // Layer Manager (Task #5)
@@ -963,11 +1086,15 @@ function render(){
     ctx.fillText('Loading WASM…',canvas.width/2,canvas.height/2);
     return;
   }
-  // Build a set of frozen/invisible layer IDs to skip rendering (Task #5)
+  // Build layer cache (id→layer) for BYLAYER color+linetype resolution (Task #5)
   const hiddenLayers = new Set();
+  window._layerCache = {};
   try {
     const layers=JSON.parse(window.cadGetLayers()||'[]');
-    layers.forEach(l=>{ if(!l.visible||l.frozen) hiddenLayers.add(l.id); });
+    layers.forEach(l=>{
+      window._layerCache[l.id]=l;
+      if(!l.visible||l.frozen) hiddenLayers.add(l.id);
+    });
   } catch(_){}
 
   const entities=JSON.parse(window.cadEntities()||'[]');
@@ -1008,9 +1135,37 @@ function drawGrid(){
   ctx.restore();
 }
 
+// ─── Line dash patterns for layer LineTyp (Task #5) ──────────────────────────
+const LAYER_DASH = {
+  Solid:   [],
+  Dashed:  [8,4],
+  Dotted:  [1,4],
+  DashDot: [8,4,1,4],
+  Center:  [16,4,4,4],
+  Hidden:  [4,4],
+};
+
+// Resolve BYLAYER color and line type from the cached layer map.
+// Returns {color, dash[]} for drawing.
+function resolveEntityStyle(e, sel){
+  if(sel) return {color:'#ff9800', dash:[]};
+  let color = e.color || '';
+  let dash   = [];
+  if(!color || color.toUpperCase()==='BYLAYER' || color===''){
+    // Look up layer from cached list
+    if(window._layerCache){
+      const lyr = window._layerCache[e.layer||0];
+      if(lyr){ color=lyr.color; dash=LAYER_DASH[lyr.lineType]||[]; }
+    }
+  }
+  if(!color||color==='BYLAYER') color='#ffffff';
+  return {color, dash};
+}
+
 function drawEntity(e,sel=false){
-  const col=sel?'#ff9800':(e.color||'#ffffff');
+  const {color:col, dash} = resolveEntityStyle(e, sel);
   ctx.save(); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=sel?2:1;
+  if(dash&&dash.length) ctx.setLineDash(dash); else ctx.setLineDash([]);
   switch(e.type){
     case 'line':{
       const[x1,y1]=w2s(e.x1,e.y1),[x2,y2]=w2s(e.x2,e.y2);
@@ -1266,6 +1421,7 @@ function drawPreview(){
     installDemoStubs();
     setStatus('Demo mode — serve wasm_exec.js + main.wasm alongside this file for full WASM mode');
   }
+  loadSnapSettings();  // restore snap mode checkboxes + enabled state from localStorage (Task #5)
   refreshLayerSel();   // populate layer dropdown (Task #5)
   updateSnapBtn();     // set initial snap button state (Task #5)
   render();
