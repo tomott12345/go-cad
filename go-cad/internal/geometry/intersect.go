@@ -2,14 +2,26 @@ package geometry
 
 import "math"
 
-// Intersect computes intersection points between two geometric entities.
-// Returns a (possibly empty) slice of Points.
+// Package-level intersection API.
+//
+// Analytical pairs (exact, within floating-point precision):
+//   Segment × Segment, Segment × Line, Segment × Ray
+//   Line    × Line, Line × Ray
+//   Circle  × Circle, Circle × Segment, Circle × Line, Circle × Ray
+//   Arc     × Arc, Arc × Circle, Arc × Segment, Arc × Line, Arc × Ray
+//   Segment × Ellipse (Newton root-finder, error < 1e-9)
+//
+// Approximated pairs (polyline tessellation at 100 samples, error < 0.5 % of
+// entity extent for smooth curves; results are not guaranteed exact):
+//   Any pair involving BezierEntity or NURBSEntity
+//   EllipseEntity × Circle/Arc/Polyline/Bezier/NURBS
 
 // ─── Top-level pairwise dispatcher ───────────────────────────────────────────
 
 // Intersect returns the intersection points of any two entities.
-// All entity-type combinations are handled; spline types use polyline
-// approximations for numerical intersection.
+// Analytical methods are used where available; spline and ellipse combinations
+// fall back to polyline approximation (100 samples).  See package-level comment
+// for the full analytical-vs-approximated matrix and tolerance contracts.
 func Intersect(a, b Entity) []Point {
         // Normalise order so dispatch is symmetric.
         pts := intersectOrdered(a, b)

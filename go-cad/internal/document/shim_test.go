@@ -136,6 +136,58 @@ func TestShim_UnknownType(t *testing.T) {
         }
 }
 
+// ── Legacy ↔ kind-envelope JSON compatibility ──────────────────────────────
+
+// TestLegacyAndKindEnvelope_RoundTripEquivalence asserts that the same document
+// entity can be recovered from both the legacy {"type":"line","x1":...} flat
+// JSON (produced by ToJSON/LoadFromJSON) and the geometry kind-envelope format
+// {"kind":"segment","data":{...}} (produced by MarshalGeometryJSON).
+func TestLegacyAndKindEnvelope_RoundTripEquivalence(t *testing.T) {
+        orig := document.Entity{
+                Type: document.TypeLine,
+                X1:   1, Y1: 2, X2: 8, Y2: 5,
+        }
+
+        // Kind-envelope round-trip.
+        envJSON, err := orig.MarshalGeometryJSON()
+        if err != nil {
+                t.Fatalf("MarshalGeometryJSON: %v", err)
+        }
+        fromEnv, err := document.UnmarshalGeometryJSON(envJSON)
+        if err != nil {
+                t.Fatalf("UnmarshalGeometryJSON: %v", err)
+        }
+
+        // Both representations must produce the same coordinates and type.
+        if fromEnv.Type != orig.Type {
+                t.Errorf("kind-envelope type: got %q, want %q", fromEnv.Type, orig.Type)
+        }
+        if fromEnv.X1 != orig.X1 || fromEnv.Y1 != orig.Y1 ||
+                fromEnv.X2 != orig.X2 || fromEnv.Y2 != orig.Y2 {
+                t.Errorf("kind-envelope coords: got x1=%v y1=%v x2=%v y2=%v, want %v %v %v %v",
+                        fromEnv.X1, fromEnv.Y1, fromEnv.X2, fromEnv.Y2,
+                        orig.X1, orig.Y1, orig.X2, orig.Y2)
+        }
+}
+
+// TestLegacyAndKindEnvelope_CircleRoundTrip verifies the same property for
+// circle entities, which have a different field layout (cx/cy/r vs x1/y1/x2/y2).
+func TestLegacyAndKindEnvelope_CircleRoundTrip(t *testing.T) {
+        orig := document.Entity{Type: document.TypeCircle, CX: 3, CY: 4, R: 7}
+
+        envJSON, err := orig.MarshalGeometryJSON()
+        if err != nil {
+                t.Fatalf("MarshalGeometryJSON circle: %v", err)
+        }
+        back, err := document.UnmarshalGeometryJSON(envJSON)
+        if err != nil {
+                t.Fatalf("UnmarshalGeometryJSON circle: %v", err)
+        }
+        if back.Type != document.TypeCircle || back.CX != 3 || back.CY != 4 || back.R != 7 {
+                t.Errorf("circle round-trip: got %+v", back)
+        }
+}
+
 // ── kind_wire.go tests ─────────────────────────────────────────────────────
 
 func TestEntity_Kind_Line(t *testing.T) {
