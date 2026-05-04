@@ -1,18 +1,11 @@
-// geometry_api.go adds geometry-engine-powered operations to the Document.
-// These functions use the internal/geometry package for precision operations
-// (snapping, intersection queries, bounding boxes) and are accessible from
-// both the WASM and Fyne targets via the shared document API.
 package document
 
 import (
 	"go-cad/internal/geometry"
 )
 
-// ─── Bounding box ─────────────────────────────────────────────────────────────
-
 // EntityBoundingBox returns the axis-aligned bounding box of entity id,
-// computed by the geometry engine. Returns the zero BBox if the id is not
-// found or the type is unrecognised.
+// computed by the geometry engine. Returns an empty BBox if not found.
 func (d *Document) EntityBoundingBox(id int) geometry.BBox {
 	for _, e := range d.entities {
 		if e.ID == id {
@@ -22,9 +15,7 @@ func (d *Document) EntityBoundingBox(id int) geometry.BBox {
 	return geometry.EmptyBBox()
 }
 
-// ─── Nearest point (snap) ─────────────────────────────────────────────────────
-
-// SnapToEntity returns the nearest point on entity id to the query point (x, y).
+// SnapToEntity returns the nearest point on entity id to query point (x, y).
 // Used by drawing tools for object-snap operations.
 // Returns (x, y) unchanged if the entity is not found.
 func (d *Document) SnapToEntity(id int, x, y float64) (float64, float64) {
@@ -63,8 +54,6 @@ func (d *Document) NearestEntity(x, y float64, snapRadius float64) int {
 	return bestID
 }
 
-// ─── Intersection ─────────────────────────────────────────────────────────────
-
 // IntersectEntities returns the intersection points between two entities by ID.
 // Returns nil if either ID is not found or the entities do not intersect.
 func (d *Document) IntersectEntities(idA, idB int) [][2]float64 {
@@ -91,11 +80,9 @@ func (d *Document) IntersectEntities(idA, idB int) [][2]float64 {
 	return out
 }
 
-// ─── Offset ───────────────────────────────────────────────────────────────────
-
-// OffsetEntity adds a new entity to the document that is a geometric offset
-// of entity id by dist (positive = left/outward).
-// Returns the new entity's ID, or -1 if the source entity is not found.
+// OffsetEntity adds a new entity that is a geometric offset of entity id by
+// dist (positive = left/outward). Returns the new entity's ID, or -1 if the
+// source entity is not found or the offset cannot be computed.
 func (d *Document) OffsetEntity(id int, dist float64) int {
 	for _, e := range d.entities {
 		if e.ID == id {
@@ -109,10 +96,9 @@ func (d *Document) OffsetEntity(id int, dist float64) int {
 	return -1
 }
 
-// ─── Trim (split) ─────────────────────────────────────────────────────────────
-
 // TrimEntity splits entity id at parametric position t ∈ [0,1].
-// The original entity is replaced by the two resulting sub-entities.
+// The original entity is replaced by the two resulting sub-entities as a
+// single atomic undo operation.
 // Returns the IDs of the two new entities, or (-1, -1) on failure.
 func (d *Document) TrimEntity(id int, t float64) (int, int) {
 	for i, e := range d.entities {
@@ -129,20 +115,29 @@ func (d *Document) TrimEntity(id int, t float64) (int, int) {
 		if leftDoc == nil || rightDoc == nil {
 			return -1, -1
 		}
-		// Remove original (no undo push — the two adds will each push)
+		// Take a single snapshot before any mutation so undo restores the
+		// pre-trim state atomically (one undo step, not three).
+		d.pushUndo()
+		// Remove original entity directly (without a redundant undo push).
 		d.entities = append(d.entities[:i], d.entities[i+1:]...)
-		idL := d.add(*leftDoc)
-		idR := d.add(*rightDoc)
-		return idL, idR
+		// Assign IDs and append without triggering pushUndo again.
+		leftDoc.ID = d.nextID
+		d.nextID++
+		if leftDoc.Color == "" {
+			leftDoc.Color = "#ffffff"
+		}
+		rightDoc.ID = d.nextID
+		d.nextID++
+		if rightDoc.Color == "" {
+			rightDoc.Color = "#ffffff"
+		}
+		d.entities = append(d.entities, *leftDoc, *rightDoc)
+		return leftDoc.ID, rightDoc.ID
 	}
 	return -1, -1
 }
 
-// ─── Length ───────────────────────────────────────────────────────────────────
-
 // EntityLength returns the arc length of entity id via the geometry engine.
-// Falls back to the document entity's own Length() if the type is not
-// recognised by the geometry engine.
 func (d *Document) EntityLength(id int) float64 {
 	for _, e := range d.entities {
 		if e.ID == id {

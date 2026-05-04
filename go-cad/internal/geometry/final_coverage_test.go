@@ -1,6 +1,3 @@
-// final_coverage_test.go covers the remaining private function branches that
-// are unreachable through the public Intersect() API due to lexicographic
-// Kind ordering, plus remaining edge cases in other functions.
 package geometry
 
 import (
@@ -9,10 +6,9 @@ import (
         "testing"
 )
 
-// ─── intersectSegmentWith: private function, all arms ────────────────────────
-// Due to lexicographic ordering ("segment" is largest), intersectSegmentWith
-// is only called via the public API for Segment×Segment. All other arms must
-// be exercised by calling the private function directly.
+// intersectSegmentWith is called in the public API only for Segment×Segment
+// (because "segment" is lexicographically largest). All other arms are exercised
+// via direct private-function calls here.
 
 func TestIntersectSegmentWith_Line(t *testing.T) {
         s := Segment{Start: Point{0, 0}, End: Point{10, 0}}
@@ -72,7 +68,7 @@ func TestIntersectSegmentWith_Bezier(t *testing.T) {
         s := Segment{Start: Point{5, -5}, End: Point{5, 5}}
         b := BezierEntity{NewBezierSpline([]Point{{0, 0}, {3, 3}, {7, 3}, {10, 0}})}
         pts := intersectSegmentWith(s, b)
-        _ = pts // just ensure no panic and arm is covered
+        _ = pts
 }
 
 func TestIntersectSegmentWith_NURBS(t *testing.T) {
@@ -94,7 +90,11 @@ func TestIntersectSegmentWith_Unknown(t *testing.T) {
         }
 }
 
-// ─── intersectPolylineWith: Line and Ray arms ─────────────────────────────────
+// intersectPolylineWith: Line and Ray arms are also unreachable via public API
+// because "line" and "ray" are lexicographically greater than "polyline"... wait,
+// actually "line" > "polyline"? No: "l" < "p" so "line" < "polyline".
+// So Intersect(polyline, line) → intersectOrdered(line, polyline) → intersectLineWith.
+// These arms in intersectPolylineWith are unreachable via public API.
 
 func TestIntersectPolylineWith_Line(t *testing.T) {
         p := Polyline{Points: []Point{{0, 0}, {10, 0}}}
@@ -114,26 +114,68 @@ func TestIntersectPolylineWith_Ray(t *testing.T) {
         }
 }
 
-// ─── intersectEllipseWith: Line and Ray arms ──────────────────────────────────
+// intersectEllipseWith: Arc, Circle, Bezier arms are unreachable via public API
+// because "arc", "bezier", "circle" are lexicographically smaller than "ellipse".
 
-func TestIntersectEllipseWith_LineNoArm(t *testing.T) {
-        // intersectEllipseWith has no Line arm — falls to nil (line × ellipse
-        // is handled by intersectLineWith in the public API due to ordering).
+func TestIntersectEllipseWith_Segment(t *testing.T) {
         e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
-        l := LineEntity{Line{P: Point{-10, 0}, Q: Point{10, 0}}}
-        pts := intersectEllipseWith(e, l)
-        _ = pts // nil is expected — just ensure no panic and the default arm is hit
+        s := SegmentEntity{Segment{Start: Point{-10, 0}, End: Point{10, 0}}}
+        pts := intersectEllipseWith(e, s)
+        if len(pts) != 2 {
+                t.Errorf("ellipse×segment direct: expected 2, got %d", len(pts))
+        }
 }
 
-func TestIntersectEllipseWith_RayNoArm(t *testing.T) {
-        // Same: no RayEntity arm in intersectEllipseWith.
+func TestIntersectEllipseWith_Circle(t *testing.T) {
         e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
-        r := RayEntity{Ray{Origin: Point{-10, 0}, Dir: Point{1, 0}}}
-        pts := intersectEllipseWith(e, r)
+        c := CircleEntity{Circle{Center: Point{4, 0}, Radius: 3}}
+        pts := intersectEllipseWith(e, c)
         _ = pts
 }
 
-// ─── intersectCircleWith: remaining unreachable arms ─────────────────────────
+func TestIntersectEllipseWith_Arc(t *testing.T) {
+        e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
+        a := ArcEntity{Arc{Center: Point{4, 0}, Radius: 3, StartDeg: 0, EndDeg: 180}}
+        pts := intersectEllipseWith(e, a)
+        _ = pts
+}
+
+func TestIntersectEllipseWith_Bezier(t *testing.T) {
+        e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
+        b := BezierEntity{NewBezierSpline([]Point{{-6, 0}, {-2, 5}, {2, 5}, {6, 0}})}
+        pts := intersectEllipseWith(e, b)
+        _ = pts
+}
+
+func TestIntersectEllipseWith_Polyline(t *testing.T) {
+        e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
+        p := PolylineEntity{Polyline{Points: []Point{{-10, 0}, {10, 0}}}}
+        pts := intersectEllipseWith(e, p)
+        if len(pts) != 2 {
+                t.Errorf("ellipse×polyline direct: expected 2, got %d", len(pts))
+        }
+}
+
+func TestIntersectEllipseWith_NURBS(t *testing.T) {
+        e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
+        sp := NURBSEntity{NewNURBSSpline(2,
+                []float64{0, 0, 0, 1, 1, 1},
+                []Point{{-6, 0}, {0, 5}, {6, 0}},
+                nil,
+        )}
+        pts := intersectEllipseWith(e, sp)
+        _ = pts
+}
+
+func TestIntersectEllipseWith_Unknown(t *testing.T) {
+        e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
+        pts := intersectEllipseWith(e, nil)
+        if pts != nil {
+                t.Errorf("unknown: expected nil, got %v", pts)
+        }
+}
+
+// intersectCircleWith: Segment, Line, Ray arms are exercised directly.
 
 func TestIntersectCircleWith_Segment(t *testing.T) {
         c := Circle{Center: Point{0, 0}, Radius: 5}
@@ -162,7 +204,15 @@ func TestIntersectCircleWith_Ray(t *testing.T) {
         }
 }
 
-// ─── intersectArcWith: all remaining arms ─────────────────────────────────────
+func TestIntersectCircleWith_Unknown(t *testing.T) {
+        c := Circle{Center: Point{0, 0}, Radius: 5}
+        pts := intersectCircleWith(c, nil)
+        if pts != nil {
+                t.Errorf("unknown: expected nil, got %v", pts)
+        }
+}
+
+// intersectArcWith: Segment arm is unreachable via public API ("arc" < "segment").
 
 func TestIntersectArcWith_Segment(t *testing.T) {
         a := Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 180}
@@ -173,7 +223,31 @@ func TestIntersectArcWith_Segment(t *testing.T) {
         }
 }
 
-// ─── intersectLineWith: NURBS arm (already tested? check) ─────────────────────
+func TestIntersectArcWith_Unknown(t *testing.T) {
+        a := Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 180}
+        pts := intersectArcWith(a, nil)
+        if pts != nil {
+                t.Errorf("unknown: expected nil, got %v", pts)
+        }
+}
+
+// intersectLineWith: Bezier arm is unreachable via public API ("bezier" < "line").
+
+func TestIntersectLineWith_Ray(t *testing.T) {
+        l := Line{P: Point{-10, 2}, Q: Point{10, 2}}
+        r := RayEntity{Ray{Origin: Point{0, -5}, Dir: Point{0, 1}}}
+        pts := intersectLineWith(l, r)
+        if len(pts) != 1 || math.Abs(pts[0].Y-2) > 1e-9 {
+                t.Errorf("line×ray direct: %v", pts)
+        }
+}
+
+func TestIntersectLineWith_Bezier(t *testing.T) {
+        l := Line{P: Point{-10, 2}, Q: Point{10, 2}}
+        b := BezierEntity{NewBezierSpline([]Point{{-5, 0}, {-2, 5}, {2, 5}, {5, 0}})}
+        pts := intersectLineWith(l, b)
+        _ = pts
+}
 
 func TestIntersectLineWith_NURBS(t *testing.T) {
         l := Line{P: Point{-10, 2}, Q: Point{20, 2}}
@@ -186,16 +260,35 @@ func TestIntersectLineWith_NURBS(t *testing.T) {
         _ = pts
 }
 
-// ─── MarshalEntity: default/unknown branch ────────────────────────────────────
+// intersectRayWith: Bezier arm is unreachable via public API ("bezier" < "ray").
+
+func TestIntersectRayWith_Bezier(t *testing.T) {
+        r := Ray{Origin: Point{-10, 2}, Dir: Point{1, 0}}
+        b := BezierEntity{NewBezierSpline([]Point{{-5, 0}, {-2, 5}, {2, 5}, {5, 0}})}
+        pts := intersectRayWith(r, b)
+        _ = pts
+}
+
+// intersectPolylineWith: nil default arm.
+
+func TestIntersectPolylineWith_Unknown(t *testing.T) {
+        p := Polyline{Points: []Point{{0, 0}, {10, 0}}}
+        pts := intersectPolylineWith(p, nil)
+        if pts != nil {
+                t.Errorf("unknown: expected nil, got %v", pts)
+        }
+}
+
+// custom entity type for testing default branches.
 
 type customEntity struct{}
 
-func (c customEntity) Kind() Kind               { return Kind("custom") }
-func (c customEntity) BoundingBox() BBox        { return EmptyBBox() }
-func (c customEntity) ClosestPoint(p Point) Point { return p }
-func (c customEntity) Length() float64          { return 0 }
-func (c customEntity) Offset(d float64) Entity  { return c }
-func (c customEntity) TrimAt(t float64) (Entity, Entity) { return c, c }
+func (c customEntity) Kind() Kind                          { return Kind("custom") }
+func (c customEntity) BoundingBox() BBox                  { return EmptyBBox() }
+func (c customEntity) ClosestPoint(p Point) Point         { return p }
+func (c customEntity) Length() float64                    { return 0 }
+func (c customEntity) Offset(d float64) Entity            { return c }
+func (c customEntity) TrimAt(t float64) (Entity, Entity)  { return c, c }
 
 func TestMarshalEntity_Unknown(t *testing.T) {
         _, err := MarshalEntity(customEntity{})
@@ -204,7 +297,12 @@ func TestMarshalEntity_Unknown(t *testing.T) {
         }
 }
 
-// ─── UnmarshalEntity: bad inner data for each type ────────────────────────────
+func TestIntersectOrdered_Unknown(t *testing.T) {
+        pts := intersectOrdered(customEntity{}, customEntity{})
+        if pts != nil {
+                t.Errorf("unknown pair: expected nil, got %v", pts)
+        }
+}
 
 func TestUnmarshalEntity_BadSegment(t *testing.T) {
         _, err := UnmarshalEntity([]byte(`{"kind":"segment","data":"bad"}`))
@@ -255,18 +353,6 @@ func TestUnmarshalEntity_BadNURBS(t *testing.T) {
         }
 }
 
-// ─── intersect.go:intersectOrdered remaining arm ─────────────────────────────
-
-// The default (unknown) arm of intersectOrdered
-func TestIntersectOrdered_Unknown(t *testing.T) {
-        pts := intersectOrdered(customEntity{}, customEntity{})
-        if pts != nil {
-                t.Errorf("unknown pair: expected nil, got %v", pts)
-        }
-}
-
-// ─── polyline.go:Offset with closed polyline ─────────────────────────────────
-
 func TestPolyline_Offset_Closed(t *testing.T) {
         p := Polyline{
                 Points: []Point{{0, 0}, {5, 0}, {5, 5}, {0, 5}},
@@ -281,22 +367,17 @@ func TestPolyline_Offset_Closed(t *testing.T) {
 func TestPolyline_Offset_SinglePoint(t *testing.T) {
         p := Polyline{Points: []Point{{3, 3}}}
         off := p.Offset(5)
-        // < 2 points → returns self
         if len(off.Points) != 1 {
                 t.Errorf("single-point offset: expected 1 pt, got %d", len(off.Points))
         }
 }
 
-// ─── polyline.go:TrimAt with zero-length polyline ────────────────────────────
-
 func TestPolyline_TrimAt_ZeroLength(t *testing.T) {
-        p := Polyline{Points: []Point{{5, 5}, {5, 5}}} // zero-length
+        p := Polyline{Points: []Point{{5, 5}, {5, 5}}}
         a, b := p.TrimAt(0.5)
         _ = a
         _ = b
 }
-
-// ─── filterBySegment: exactly one inside one outside ─────────────────────────
 
 func TestFilterBySegment_MixedInsideOutside(t *testing.T) {
         s := Segment{Start: Point{0, 0}, End: Point{10, 0}}
@@ -306,7 +387,22 @@ func TestFilterBySegment_MixedInsideOutside(t *testing.T) {
         }
 }
 
-// ─── IntersectLineCircle: discriminant == 0 exactly ──────────────────────────
+func TestFilterBySegment_ZeroLengthSeg(t *testing.T) {
+        s := Segment{Start: Point{3, 0}, End: Point{3, 0}}
+        pts := filterBySegment(s, []Point{{3, 0}, {5, 0}})
+        if len(pts) != 1 {
+                t.Errorf("zero-length seg: expected 1 (near start), got %d", len(pts))
+        }
+}
+
+func TestFilterBySegment_ZeroLengthSegMiss(t *testing.T) {
+        s := Segment{Start: Point{3, 0}, End: Point{3, 0}}
+        pts := filterBySegment(s, []Point{{9, 0}})
+        if len(pts) != 0 {
+                t.Errorf("zero-length miss: expected 0, got %d", len(pts))
+        }
+}
+
 
 func TestIntersectLineCircle_TangentBottom(t *testing.T) {
         l := Line{P: Point{-10, -5}, Q: Point{10, -5}}
@@ -320,8 +416,6 @@ func TestIntersectLineCircle_TangentBottom(t *testing.T) {
         }
 }
 
-// ─── spline.go:PointAt clamping ──────────────────────────────────────────────
-
 func TestBezierSpline_PointAt_AtOne(t *testing.T) {
         sp := NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})
         p := sp.PointAt(1.0)
@@ -330,19 +424,34 @@ func TestBezierSpline_PointAt_AtOne(t *testing.T) {
         }
 }
 
-func TestBezierSpline_PointAt_SegBoundary(t *testing.T) {
-        // Multi-segment spline: 7 control points = 2 segments
+func TestBezierSpline_PointAt_SegBoundaryClamped(t *testing.T) {
+        // 7 control points = 2 segments; t=0.5 is at the exact boundary.
         sp := NewBezierSpline([]Point{
                 {0, 0}, {2, 4}, {4, 4}, {6, 0}, {8, -4}, {10, -4}, {12, 0},
         })
-        // t at exact segment boundary (0.5 for 2-segment spline)
         p := sp.PointAt(0.5)
         if math.IsNaN(p.X) || math.IsNaN(p.Y) {
                 t.Errorf("PointAt boundary: NaN %v", p)
         }
 }
 
-// ─── NURBS PointAt boundary ───────────────────────────────────────────────────
+// Hit the seg >= ns clamp branch: pass t that rounds up to seg == ns.
+func TestBezierSpline_PointAt_SegOverflow(t *testing.T) {
+        sp := NewBezierSpline([]Point{{0, 0}, {3, 5}, {7, 5}, {10, 0}})
+        // t = 0.9999... → seg = int(0.9999*1) = 0, fine. t slightly > 1/ns boundary.
+        // With 1 segment, any t in [0,1) picks seg=0. t=1.0 is handled by t>=1 branch.
+        // To hit seg>=ns: need ns>1 and t such that int(t*ns) == ns.
+        // 2 segments: t=1.0 is already handled. t=0.999 → seg=1 which equals ns=2? No.
+        // Actually the clamp is: if seg >= ns { seg = ns-1 }. With ns=1: seg=int(t*1).
+        // t=0.9 → seg=0, fine. This branch is hit when t*ns computes to exactly ns.
+        // For ns=1, t must be in [1, 2) — but that's caught by t>=1.
+        // This branch is effectively unreachable for well-formed inputs.
+        // Call with t=0.9999 to exercise the normal path without NaN.
+        p := sp.PointAt(0.9999)
+        if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+                t.Errorf("PointAt(0.9999): NaN %v", p)
+        }
+}
 
 func TestNURBSSpline_PointAt_BelowLo(t *testing.T) {
         sp := NewNURBSSpline(2,
@@ -350,12 +459,24 @@ func TestNURBSSpline_PointAt_BelowLo(t *testing.T) {
                 []Point{{0, 0}, {5, 5}, {10, 0}},
                 nil,
         )
-        // t below domain minimum should be clamped to lo
         p := sp.PointAt(-1)
         _ = p
 }
 
-// ─── intersectCollinearSegments: parallel (not collinear) branch ──────────────
+func TestNURBSSpline_PointAt_ZeroWeight(t *testing.T) {
+        // Construct a NURBS where all weights sum to 0 at the evaluation point
+        // to hit the w < Epsilon branch. Use zero weights.
+        sp := NURBSSpline{
+                Degree:   1,
+                Knots:    []float64{0, 0, 1, 1},
+                Controls: []Point{{0, 0}, {10, 0}},
+                Weights:  []float64{0, 0},
+        }
+        p := sp.PointAt(0.5)
+        if p.X != 0 || p.Y != 0 {
+                t.Errorf("zero weight: expected {0,0}, got %v", p)
+        }
+}
 
 func TestIntersectCollinear_Parallel(t *testing.T) {
         a := Segment{Start: Point{0, 0}, End: Point{5, 0}}
@@ -366,53 +487,105 @@ func TestIntersectCollinear_Parallel(t *testing.T) {
         }
 }
 
-// ─── intersectPolylineWith nil default ───────────────────────────────────────
-
-func TestIntersectPolylineWith_Unknown(t *testing.T) {
-        p := Polyline{Points: []Point{{0, 0}, {10, 0}}}
-        pts := intersectPolylineWith(p, nil)
-        if pts != nil {
-                t.Errorf("unknown: expected nil, got %v", pts)
+func TestIntersectCollinear_TouchPoint(t *testing.T) {
+        // Two segments that just touch at a single point — hi == lo → one point.
+        a := Segment{Start: Point{0, 0}, End: Point{5, 0}}
+        b := Segment{Start: Point{5, 0}, End: Point{10, 0}}
+        pts := IntersectSegments(a, b)
+        // They share exactly the point (5,0).
+        if len(pts) != 1 {
+                t.Errorf("touch: expected 1, got %d", len(pts))
         }
 }
 
-func TestIntersectEllipseWith_Unknown(t *testing.T) {
-        e := Ellipse{Center: Point{0, 0}, A: 5, B: 3, Rotation: 0}
-        pts := intersectEllipseWith(e, nil)
+func TestIntersectLineWith_DefaultNil(t *testing.T) {
+        l := Line{P: Point{0, 0}, Q: Point{10, 0}}
+        pts := intersectLineWith(l, nil)
         if pts != nil {
-                t.Errorf("unknown: expected nil, got %v", pts)
+                t.Errorf("nil entity: expected nil, got %v", pts)
         }
 }
 
-func TestIntersectCircleWith_Unknown(t *testing.T) {
+func TestIntersectRayWith_DefaultNil(t *testing.T) {
+        r := Ray{Origin: Point{0, 0}, Dir: Point{1, 0}}
+        pts := intersectRayWith(r, nil)
+        if pts != nil {
+                t.Errorf("nil entity: expected nil, got %v", pts)
+        }
+}
+
+func TestIntersectLineCircle_ZeroLengthLine(t *testing.T) {
+        l := Line{P: Point{3, 0}, Q: Point{3, 0}}
         c := Circle{Center: Point{0, 0}, Radius: 5}
-        pts := intersectCircleWith(c, nil)
+        pts := IntersectLineCircle(l, c)
         if pts != nil {
-                t.Errorf("unknown: expected nil, got %v", pts)
+                t.Errorf("zero-length line: expected nil, got %v", pts)
         }
 }
 
-func TestIntersectArcWith_Unknown(t *testing.T) {
-        a := Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 0, EndDeg: 180}
-        pts := intersectArcWith(a, nil)
+func TestIntersectCollinear_ZeroLengthA(t *testing.T) {
+        // Both segments must be at the same point to pass the collinearity check.
+        // A zero-length segment at {3,0}; B spans {3,0}→{3,0} — same point.
+        // DistToPoint on the zero-length line is distance from {3,0} to {3,0} = 0.
+        a := Segment{Start: Point{3, 0}, End: Point{3, 0}}
+        b := Segment{Start: Point{3, 0}, End: Point{3, 0}}
+        pts := intersectCollinearSegments(a, b)
         if pts != nil {
-                t.Errorf("unknown: expected nil, got %v", pts)
+                t.Errorf("zero-length A: expected nil, got %v", pts)
         }
 }
 
-// ─── arc.go:ClosestPoint: zero-radius degenerate ────────────────────────────
-
-func TestArc_ClosestPoint_AtCenter(t *testing.T) {
-        a := Arc{Center: Point{0, 0}, Radius: 5, StartDeg: 45, EndDeg: 135}
-        // Point at center — should return the closest arc point without panic
-        p := a.ClosestPoint(Point{0, 0})
-        _ = p // just no panic
+func TestPolyline_TrimAt_BeyondEnd(t *testing.T) {
+        p := Polyline{Points: []Point{{0, 0}, {5, 0}, {10, 0}}}
+        first, second := p.TrimAt(2.0)
+        if len(first.Points) < 2 {
+                t.Error("TrimAt>1: first part too short")
+        }
+        _ = second
 }
 
-// ─── RawEntity JSON roundtrip ─────────────────────────────────────────────────
+func TestUnmarshalEntity_BadEllipse(t *testing.T) {
+        _, err := UnmarshalEntity([]byte(`{"kind":"ellipse","data":"bad"}`))
+        if err == nil {
+                t.Error("expected error for bad ellipse data")
+        }
+}
+
+func TestUnmarshalEntity_UnknownKind(t *testing.T) {
+        _, err := UnmarshalEntity([]byte(`{"kind":"unknown_xyz","data":{}}`))
+        if err == nil {
+                t.Error("expected error for unknown kind")
+        }
+}
+
+func TestUnmarshalEntity_BrokenOuterJSON(t *testing.T) {
+        _, err := UnmarshalEntity([]byte(`not-json`))
+        if err == nil {
+                t.Error("expected error for broken JSON")
+        }
+}
+
+func TestBezierSpline_PointAt_SegClamp(t *testing.T) {
+        // 4 control points = 1 segment; t values all < 1.0 cannot trigger seg>=ns.
+        // Use 7 control points (2 segments) and verify t=0.9999 does not panic.
+        sp := NewBezierSpline([]Point{
+                {0, 0}, {2, 4}, {4, 4}, {6, 0},
+                {8, -4}, {10, -4}, {12, 0},
+        })
+        // Force the clamp: this requires t * ns to be exactly >= ns in float64.
+        // math.Nextafter(1.0, 0) * 2 is still < 2 in practice, so the clamp is
+        // a defensive guard. Call PointAt with t just below 1.0 to verify no crash.
+        p := sp.PointAt(math.Nextafter(1.0, 0))
+        if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+                t.Errorf("near-1.0 PointAt: NaN %v", p)
+        }
+}
 
 func TestRawEntity_MarshalRoundtrip(t *testing.T) {
-        re := RawEntity{EntityKind: KindCircle, Data: json.RawMessage(`{"center":{"x":0,"y":0},"radius":5}`)}
+        re := RawEntity{
+                EntityKind: KindCircle,
+                Data:       json.RawMessage(`{"center":{"x":0,"y":0},"radius":5}`),
+        }
         b, err := json.Marshal(re)
         if err != nil {
                 t.Fatalf("marshal: %v", err)

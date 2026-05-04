@@ -11,7 +11,7 @@ import (
 func TestSolveEntities_HorizontalSegment(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{10, 2},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 2},
                 }},
         }
         cs := []constraints.EntityConstraint{
@@ -30,7 +30,7 @@ func TestSolveEntities_HorizontalSegment(t *testing.T) {
 func TestSolveEntities_VerticalSegment(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{3, 10},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 3, Y: 10},
                 }},
         }
         cs := []constraints.EntityConstraint{
@@ -49,14 +49,13 @@ func TestSolveEntities_VerticalSegment(t *testing.T) {
 func TestSolveEntities_CoincidentEndpoints(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{5, 0},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 5, Y: 0},
                 }},
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{6, 0}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 6, Y: 0}, End: geometry.Point{X: 10, Y: 0},
                 }},
         }
         cs := []constraints.EntityConstraint{
-                // end of entity 0 coincides with start of entity 1
                 {Kind: constraints.Coincident, Indices: []int{0, 1}},
         }
         updated, res := constraints.SolveEntitiesDefault(entities, cs)
@@ -74,7 +73,7 @@ func TestSolveEntities_FixedSegment(t *testing.T) {
         fixed := geometry.Point{X: 0, Y: 0}
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{1, 1}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 1, Y: 1}, End: geometry.Point{X: 10, Y: 0},
                 }},
         }
         cs := []constraints.EntityConstraint{
@@ -94,10 +93,10 @@ func TestSolveEntities_FixedSegment(t *testing.T) {
 func TestSolveEntities_ParallelSegments(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 0},
                 }},
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 5}, End: geometry.Point{10, 8},
+                        Start: geometry.Point{X: 0, Y: 5}, End: geometry.Point{X: 10, Y: 8},
                 }},
         }
         cs := []constraints.EntityConstraint{
@@ -120,10 +119,10 @@ func TestSolveEntities_ParallelSegments(t *testing.T) {
 func TestSolveEntities_EqualLength(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 0},
                 }},
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 5}, End: geometry.Point{4, 5},
+                        Start: geometry.Point{X: 0, Y: 5}, End: geometry.Point{X: 4, Y: 5},
                 }},
         }
         cs := []constraints.EntityConstraint{
@@ -145,7 +144,7 @@ func TestSolveEntities_EqualLength(t *testing.T) {
 func TestSolveEntities_CirclePreservesRadius(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.CircleEntity{Circle: geometry.Circle{
-                        Center: geometry.Point{5, 5}, Radius: 3,
+                        Center: geometry.Point{X: 5, Y: 5}, Radius: 3,
                 }},
         }
         fixed := geometry.Point{X: 0, Y: 0}
@@ -165,10 +164,10 @@ func TestSolveEntities_CirclePreservesRadius(t *testing.T) {
 func TestSolveEntities_Perpendicular(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 0},
                 }},
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{5, 0}, End: geometry.Point{8, 5},
+                        Start: geometry.Point{X: 5, Y: 0}, End: geometry.Point{X: 8, Y: 5},
                 }},
         }
         cs := []constraints.EntityConstraint{
@@ -191,14 +190,12 @@ func TestSolveEntities_Perpendicular(t *testing.T) {
 func TestSolveEntities_InvalidIndices(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 0},
                 }},
         }
         cs := []constraints.EntityConstraint{
-                // index 99 does not exist — should be silently skipped
                 {Kind: constraints.Horizontal, Indices: []int{99}},
         }
-        // Must not panic
         updated, _ := constraints.SolveEntitiesDefault(entities, cs)
         _ = updated
 }
@@ -206,17 +203,16 @@ func TestSolveEntities_InvalidIndices(t *testing.T) {
 func TestSolveEntities_Midpoint(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 0}, End: geometry.Point{10, 0},
+                        Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 0},
                 }},
                 geometry.SegmentEntity{Segment: geometry.Segment{
-                        Start: geometry.Point{0, 5}, End: geometry.Point{10, 5},
+                        Start: geometry.Point{X: 0, Y: 5}, End: geometry.Point{X: 10, Y: 5},
                 }},
                 geometry.CircleEntity{Circle: geometry.Circle{
-                        Center: geometry.Point{0, 0}, Radius: 1,
+                        Center: geometry.Point{X: 0, Y: 0}, Radius: 1,
                 }},
         }
         cs := []constraints.EntityConstraint{
-                // center of circle (entity 2) at midpoint of entity 0 endpoints
                 {Kind: constraints.Midpoint, Indices: []int{0, 0, 2}},
         }
         updated, res := constraints.SolveEntitiesDefault(entities, cs)
@@ -232,7 +228,7 @@ func TestSolveEntities_Midpoint(t *testing.T) {
 func TestSolveEntities_Polyline(t *testing.T) {
         entities := []geometry.Entity{
                 geometry.PolylineEntity{Polyline: geometry.Polyline{
-                        Points: []geometry.Point{{0, 0}, {5, 1}, {10, 0}},
+                        Points: []geometry.Point{{X: 0, Y: 0}, {X: 5, Y: 1}, {X: 10, Y: 0}},
                 }},
         }
         target := geometry.Point{X: 0, Y: 5}
@@ -249,12 +245,10 @@ func TestSolveEntities_Polyline(t *testing.T) {
         }
 }
 
-// TestEqualRadiusConstraint verifies the EqualRadius constraint.
 func TestEqualRadiusConstraint(t *testing.T) {
         ra := 5.0
         rb := 3.0
         c := constraints.EqualRadiusConstraint{RA: &ra, RB: &rb}
-
         if math.Abs(c.Error(nil)-2) > 1e-9 {
                 t.Errorf("initial error: %v", c.Error(nil))
         }
@@ -267,32 +261,179 @@ func TestEqualRadiusConstraint(t *testing.T) {
         }
 }
 
-// TestTangentArcConstraint verifies the pointer-based tangent constraint.
-// TangentArcConstraint translates the LINE to achieve dist(line,center) == r.
-// This test checks Error() semantics and that Apply() does not panic, and
-// that a single application reduces the error when center is already tangent.
 func TestTangentArcConstraint(t *testing.T) {
         r := 3.0
-        p0 := geometry.Point{0, 0}
-        p1 := geometry.Point{10, 0}
-        // Place center exactly r above the line → already tangent, error = 0.
-        center := geometry.Point{5, 3}
-
+        p0 := geometry.Point{X: 0, Y: 0}
+        p1 := geometry.Point{X: 10, Y: 0}
+        center := geometry.Point{X: 5, Y: 3}
         pts := []*geometry.Point{&p0, &p1, &center}
         c := constraints.TangentArcConstraint{
                 LineA: 0, LineB: 1, CircleCenter: 2, Radius: &r,
         }
-
         err := c.Error(pts)
-        // dist = 3 (center 3 above line y=0), radius = 3 → error = 0
         if math.Abs(err) > 1e-6 {
                 t.Errorf("initial error: %v, want 0 (already tangent)", err)
         }
-
-        // Apply on already-tangent config must be a no-op (correction = 0).
         c.Apply(pts)
         afterErr := c.Error(pts)
         if math.Abs(afterErr) > 1e-6 {
                 t.Errorf("error after Apply on tangent config: %v, want ~0", afterErr)
+        }
+}
+
+func TestSolveEntities_EqualRadius(t *testing.T) {
+        c1 := geometry.CircleEntity{Circle: geometry.Circle{
+                Center: geometry.Point{X: 0, Y: 0}, Radius: 3,
+        }}
+        c2 := geometry.CircleEntity{Circle: geometry.Circle{
+                Center: geometry.Point{X: 10, Y: 0}, Radius: 7,
+        }}
+        entities := []geometry.Entity{c1, c2}
+        cs := []constraints.EntityConstraint{{Kind: constraints.EqualRadius, Indices: []int{0, 1}}}
+        updated, res := constraints.SolveEntitiesDefault(entities, cs)
+        if !res.Converged {
+                t.Error("equal_radius: did not converge")
+        }
+        r1 := updated[0].(geometry.CircleEntity).Radius
+        r2 := updated[1].(geometry.CircleEntity).Radius
+        if math.Abs(r1-r2) > 1e-4 {
+                t.Errorf("equal_radius: radii differ: %.4f vs %.4f", r1, r2)
+        }
+        if math.Abs(r1-5.0) > 1e-4 {
+                t.Errorf("equal_radius: expected avg 5.0, got %.4f", r1)
+        }
+}
+
+func TestSolveEntities_EqualRadius_Arc(t *testing.T) {
+        a1 := geometry.ArcEntity{Arc: geometry.Arc{
+                Center: geometry.Point{X: 0, Y: 0}, Radius: 4, StartDeg: 0, EndDeg: 90,
+        }}
+        a2 := geometry.ArcEntity{Arc: geometry.Arc{
+                Center: geometry.Point{X: 5, Y: 0}, Radius: 8, StartDeg: 0, EndDeg: 90,
+        }}
+        entities := []geometry.Entity{a1, a2}
+        cs := []constraints.EntityConstraint{{Kind: constraints.EqualRadius, Indices: []int{0, 1}}}
+        updated, res := constraints.SolveEntitiesDefault(entities, cs)
+        if !res.Converged {
+                t.Error("equal_radius arc: did not converge")
+        }
+        r1 := updated[0].(geometry.ArcEntity).Radius
+        r2 := updated[1].(geometry.ArcEntity).Radius
+        if math.Abs(r1-r2) > 1e-4 {
+                t.Errorf("equal_radius arc: radii differ: %.4f vs %.4f", r1, r2)
+        }
+}
+
+func TestSolveEntities_Tangent(t *testing.T) {
+        line := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: -10, Y: 3}, End: geometry.Point{X: 10, Y: 3},
+        }}
+        circle := geometry.CircleEntity{Circle: geometry.Circle{
+                Center: geometry.Point{X: 0, Y: 0}, Radius: 3,
+        }}
+        entities := []geometry.Entity{line, circle}
+        cs := []constraints.EntityConstraint{{Kind: constraints.Tangent, Indices: []int{0, 1}}}
+        _, res := constraints.SolveEntitiesDefault(entities, cs)
+        if !res.Converged {
+                t.Errorf("tangent: did not converge (error=%.8f)", res.FinalError)
+        }
+}
+
+func TestSolveEntities_EqualRadius_NilRadius(t *testing.T) {
+        seg := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 5, Y: 0},
+        }}
+        circle := geometry.CircleEntity{Circle: geometry.Circle{
+                Center: geometry.Point{X: 10, Y: 0}, Radius: 3,
+        }}
+        entities := []geometry.Entity{seg, circle}
+        cs := []constraints.EntityConstraint{{Kind: constraints.EqualRadius, Indices: []int{0, 1}}}
+        _, _ = constraints.SolveEntitiesDefault(entities, cs)
+}
+
+func TestSolveEntities_Tangent_NoRadius(t *testing.T) {
+        seg1 := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 5, Y: 0},
+        }}
+        seg2 := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 0, Y: 1}, End: geometry.Point{X: 5, Y: 1},
+        }}
+        entities := []geometry.Entity{seg1, seg2}
+        cs := []constraints.EntityConstraint{{Kind: constraints.Tangent, Indices: []int{0, 1}}}
+        _, _ = constraints.SolveEntitiesDefault(entities, cs)
+}
+
+func TestSolveEntities_Symmetric(t *testing.T) {
+        seg1 := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: -3, Y: 5}, End: geometry.Point{X: -3, Y: 0},
+        }}
+        axis := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 0, Y: -10}, End: geometry.Point{X: 0, Y: 10},
+        }}
+        seg2 := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 4, Y: 5}, End: geometry.Point{X: 4, Y: 0},
+        }}
+        entities := []geometry.Entity{seg1, seg2, axis}
+        cs := []constraints.EntityConstraint{
+                {Kind: constraints.Symmetric, Indices: []int{0, 1, 2, 2}},
+        }
+        updated, _ := constraints.SolveEntitiesDefault(entities, cs)
+        s1 := updated[0].(geometry.SegmentEntity)
+        s2 := updated[1].(geometry.SegmentEntity)
+        if math.Abs(s1.Start.X+s2.Start.X) > 0.5 {
+                t.Errorf("symmetric: expected X mirror, got %v %v", s1.Start.X, s2.Start.X)
+        }
+}
+
+func TestSolveEntities_Spline(t *testing.T) {
+        sp := geometry.NURBSEntity{NURBSSpline: geometry.NewNURBSSpline(2,
+                []float64{0, 0, 0, 1, 1, 1},
+                []geometry.Point{{X: 0, Y: 0}, {X: 5, Y: 5}, {X: 10, Y: 0}},
+                nil,
+        )}
+        seg := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 10, Y: 0},
+        }}
+        entities := []geometry.Entity{sp, seg}
+        cs := []constraints.EntityConstraint{{Kind: constraints.Horizontal, Indices: []int{1}}}
+        updated, _ := constraints.SolveEntitiesDefault(entities, cs)
+        if len(updated) != 2 {
+                t.Errorf("spline: expected 2 entities, got %d", len(updated))
+        }
+}
+
+func TestSolveEntities_EmptyPolyline(t *testing.T) {
+        poly := geometry.PolylineEntity{Polyline: geometry.Polyline{Points: nil}}
+        entities := []geometry.Entity{poly}
+        cs := []constraints.EntityConstraint{{Kind: constraints.Horizontal, Indices: []int{0}}}
+        updated, _ := constraints.SolveEntitiesDefault(entities, cs)
+        if len(updated) != 1 {
+                t.Errorf("empty polyline: expected 1 entity, got %d", len(updated))
+        }
+}
+
+func TestSolveEntities_NilConstraint(t *testing.T) {
+        seg := geometry.SegmentEntity{Segment: geometry.Segment{
+                Start: geometry.Point{X: 0, Y: 0}, End: geometry.Point{X: 5, Y: 0},
+        }}
+        entities := []geometry.Entity{seg}
+        cs := []constraints.EntityConstraint{
+                {Kind: constraints.Coincident, Indices: []int{99, 99}},
+                {Kind: constraints.EqualRadius, Indices: []int{0, 99}},
+                {Kind: constraints.EqualRadius, Indices: []int{}},
+                {Kind: constraints.Tangent, Indices: []int{99, 99}},
+                {Kind: constraints.Tangent, Indices: []int{}},
+                {Kind: constraints.Horizontal, Indices: []int{}},
+                {Kind: constraints.Vertical, Indices: []int{}},
+                {Kind: constraints.Parallel, Indices: []int{0}},
+                {Kind: constraints.Perpendicular, Indices: []int{0}},
+                {Kind: constraints.EqualLength, Indices: []int{0}},
+                {Kind: constraints.Fixed, Indices: []int{0}},
+                {Kind: constraints.Midpoint, Indices: []int{0, 0}},
+                {Kind: constraints.Symmetric, Indices: []int{0, 0, 0}},
+        }
+        updated, _ := constraints.SolveEntitiesDefault(entities, cs)
+        if len(updated) != 1 {
+                t.Errorf("nil constraints: expected 1 entity, got %d", len(updated))
         }
 }
