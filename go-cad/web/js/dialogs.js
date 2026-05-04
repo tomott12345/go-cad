@@ -419,12 +419,14 @@ export function executePrint() {
   const paper   = document.getElementById('print-paper')?.value || 'a4';
   const orient  = document.getElementById('print-orient')?.value || 'landscape';
 
-  // Determine scale multiplier (world-units-per-mm or "fit")
-  const scaleRatios = { 'fit':0, '1:1':1, '1:2':0.5, '1:5':0.2, '1:10':0.1, '1:50':0.02, '1:100':0.01 };
-  const scaleRatio = scaleRatios[scale] ?? 0; // 0 = fit
+  // scaleRatio: mm of paper per world unit (0 = fit-to-page).
+  // e.g. 1:100 → 1 world unit = 0.01 mm on paper → scaleRatio = 0.01
+  const scaleRatios = { 'fit': 0, '1:1': 1, '1:2': 0.5, '1:5': 0.2,
+                        '1:10': 0.1, '1:50': 0.02, '1:100': 0.01 };
+  const scaleRatio = scaleRatios[scale] ?? 0;
 
   if (fmt === 'pdf') {
-    // Apply @page CSS for chosen paper/orientation/margins then invoke browser print
+    // Apply @page CSS for chosen paper/orientation/margins, then invoke browser print
     const pageCSS = `@page { size: ${paper} ${orient}; margin: ${margins}mm; }`;
     let styleEl = document.getElementById('_print-page-style');
     if (!styleEl) {
@@ -435,21 +437,24 @@ export function executePrint() {
     styleEl.textContent = pageCSS;
     window.print();
     setStatus(`PDF print dialog opened (${paper} ${orient}, ${margins}mm margins, area: ${area}).`);
+
   } else if (fmt === 'svg') {
     if (!state.wasmReady || !window.cadExportSVG) { setStatus('SVG export requires WASM.'); return; }
+    let svgStr = window.cadExportSVG();
     const bounds = getPlotBounds(area);
-    // cadExportSVG accepts optional bounding box to crop the output
-    let svgStr;
-    if (bounds && window.cadExportSVGRegion) {
-      svgStr = window.cadExportSVGRegion(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
-    } else {
-      svgStr = window.cadExportSVG();
-    }
-    // Apply scale: add viewBox and width/height if scale != fit
-    if (scaleRatio > 0 && bounds) {
-      const wMM = (bounds.maxX - bounds.minX) * scaleRatio;
-      const hMM = (bounds.maxY - bounds.minY) * scaleRatio;
-      svgStr = svgStr.replace(/<svg([^>]*)>/, `<svg$1 width="${wMM.toFixed(2)}mm" height="${hMM.toFixed(2)}mm">`);
+    if (bounds) {
+      // Crop SVG to the desired area by replacing viewBox and dimensions.
+      // The SVG writer uses CAD world coordinates directly (Y increases upward in CAD,
+      // SVG Y increases downward — the writer uses entity coords verbatim so we match).
+      const vbW = bounds.maxX - bounds.minX;
+      const vbH = bounds.maxY - bounds.minY;
+      const wMM = scaleRatio > 0 ? vbW * scaleRatio : vbW;
+      const hMM = scaleRatio > 0 ? vbH * scaleRatio : vbH;
+      // Replace both viewBox and width/height in the <svg> opening tag
+      svgStr = svgStr.replace(
+        /(<svg[^>]*)\sviewBox="[^"]*"[^>]*width="[^"]*"[^>]*height="[^"]*"/,
+        `$1 viewBox="${bounds.minX.toFixed(4)} ${bounds.minY.toFixed(4)} ${vbW.toFixed(4)} ${vbH.toFixed(4)}" width="${wMM.toFixed(2)}mm" height="${hMM.toFixed(2)}mm"`
+      );
     }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml' }));
@@ -457,23 +462,37 @@ export function executePrint() {
     a.click();
     URL.revokeObjectURL(a.href);
     setStatus(`Exported drawing.svg (area: ${area}, scale: ${scale}).`);
+
   } else {
-    // PNG export — apply area bounds and DPI
+    // PNG export — crop to area bounds, apply named scale or DPI-only scaling
     const srcCanvas = document.getElementById('canvas');
     if (!srcCanvas) return;
-    const scaleFactor = dpi / 96;
+
+    // Crop source region from current canvas based on plot bounds
     let sx0 = 0, sy0 = 0, sw = srcCanvas.width, sh = srcCanvas.height;
-    if (true) {
-      const bounds = getPlotBounds(area);
-      if (bounds) {
-        const [bsx0, bsy0] = w2s(bounds.minX, bounds.maxY);
-        const [bsx1, bsy1] = w2s(bounds.maxX, bounds.minY);
-        sx0 = Math.max(0, Math.floor(Math.min(bsx0,bsx1)));
-        sy0 = Math.max(0, Math.floor(Math.min(bsy0,bsy1)));
-        sw  = Math.min(srcCanvas.width  - sx0, Math.ceil(Math.abs(bsx1-bsx0)));
-        sh  = Math.min(srcCanvas.height - sy0, Math.ceil(Math.abs(bsy1-bsy0)));
-      }
+    const bounds = getPlotBounds(area);
+    if (bounds) {
+      const [bsx0, bsy0] = w2s(bounds.minX, bounds.maxY); // top-left in screen
+      const [bsx1, bsy1] = w2s(bounds.maxX, bounds.minY); // bottom-right in screen
+      sx0 = Math.max(0, Math.floor(Math.min(bsx0, bsx1)));
+      sy0 = Math.max(0, Math.floor(Math.min(bsy0, bsy1)));
+      sw  = Math.min(srcCanvas.width  - sx0, Math.ceil(Math.abs(bsx1 - bsx0)));
+      sh  = Math.min(srcCanvas.height - sy0, Math.ceil(Math.abs(bsy1 - bsy0)));
     }
+
+    // Apply scale to output resolution.
+    // For named scale: desiredPixelsPerWorldUnit = scaleRatio * dpi / 25.4
+    // Current canvas has state.zoom pixels per world unit in the source crop.
+    // Scale factor from source crop to output = desiredPPWU / state.zoom
+    // For "fit": use DPI / 96 (screen-to-print resolution upgrade only)
+    let scaleFactor;
+    if (scaleRatio > 0 && bounds && state.zoom > 0) {
+      const desiredPPWU = scaleRatio * dpi / 25.4; // pixels-per-world-unit at print scale
+      scaleFactor = desiredPPWU / state.zoom;
+    } else {
+      scaleFactor = dpi / 96;
+    }
+
     const outW = Math.max(1, Math.round(sw * scaleFactor));
     const outH = Math.max(1, Math.round(sh * scaleFactor));
     const offscreen = document.createElement('canvas');
