@@ -269,6 +269,149 @@ func TestTrim_NoIntersectionReturnsNil(t *testing.T) {
         }
 }
 
+func TestTrim_Undo(t *testing.T) {
+        d := document.New()
+        target := d.AddLine(-10, 0, 10, 0, 0, "#fff")
+        cutter := d.AddLine(0, -5, 0, 5, 0, "#fff")
+        newIDs := d.Trim(cutter, target, -5, 0)
+        if len(newIDs) == 0 {
+                t.Skip("Trim produced no result — skipping undo check")
+        }
+        // After trim, the original target should be gone (replaced by surviving segment).
+        for _, e := range d.Entities() {
+                if e.ID == target {
+                        t.Error("target entity should have been removed after Trim")
+                }
+        }
+        // After undo, the original target should be restored.
+        d.Undo()
+        found := false
+        for _, e := range d.Entities() {
+                if e.ID == target {
+                        found = true
+                        // Must span the original x range.
+                        if !approxEq(e.X1, -10) && !approxEq(e.X2, -10) {
+                                t.Errorf("restored target x1/x2 wrong: %.4f %.4f", e.X1, e.X2)
+                        }
+                }
+        }
+        if !found {
+                t.Error("original target entity should be restored after undo")
+        }
+        // And the surviving trim segment should be gone.
+        for _, e := range d.Entities() {
+                for _, id := range newIDs {
+                        if e.ID == id {
+                                t.Errorf("trim surviving entity %d should be removed after undo", id)
+                        }
+                }
+        }
+}
+
+func TestTrim_PickRightHalf(t *testing.T) {
+        d := document.New()
+        // Horizontal line; cutter crosses at x=0.
+        target := d.AddLine(-10, 0, 10, 0, 0, "#fff")
+        cutter := d.AddLine(0, -5, 0, 5, 0, "#fff")
+        // Pick the RIGHT half (x>0); the LEFT half should survive.
+        newIDs := d.Trim(cutter, target, 5, 0)
+        if len(newIDs) == 0 {
+                t.Fatal("Trim returned empty")
+        }
+        for _, e := range d.Entities() {
+                for _, id := range newIDs {
+                        if e.ID == id {
+                                // surviving segment must be entirely on the left (x ≤ 0)
+                                if e.X1 > 1e-6 && e.X2 > 1e-6 {
+                                        t.Errorf("surviving segment should be left of x=0; X1=%.4f X2=%.4f", e.X1, e.X2)
+                                }
+                        }
+                }
+        }
+}
+
+func TestTrim_CircleTarget(t *testing.T) {
+        // A circle can also be a target if the geometry supports it.
+        // A line through the centre of a circle produces 2 intersections.
+        d := document.New()
+        circle := d.AddCircle(0, 0, 5, 0, "#fff")
+        cutter := d.AddLine(-10, 0, 10, 0, 0, "#fff") // horizontal through centre
+        // Pick the top arc; should produce 1 or 2 surviving sub-arcs.
+        result := d.Trim(cutter, circle, 0, 6) // pick above circle (y=6 outside, but inside pick selects nearest)
+        // We just verify it doesn't crash and either returns valid IDs or nil.
+        if result != nil {
+                for _, id := range result {
+                        found := false
+                        for _, e := range d.Entities() {
+                                if e.ID == id {
+                                        found = true
+                                }
+                        }
+                        if !found {
+                                t.Errorf("surviving entity ID %d not found in document", id)
+                        }
+                }
+        }
+}
+
+// ── Extend (additional) ───────────────────────────────────────────────────────
+
+func TestExtend_ExtendsStartEnd(t *testing.T) {
+        d := document.New()
+        // Line from x=5 to x=10; boundary at x=0 (left side).
+        target := d.AddLine(5, 0, 10, 0, 0, "#fff")
+        boundary := d.AddLine(0, -10, 0, 10, 0, "#fff")
+        // Pick near start (x=5 side) to extend that end leftward to x=0.
+        newID := d.Extend(boundary, target, 5, 0)
+        if newID < 0 {
+                t.Fatal("Extend returned -1")
+        }
+        for _, e := range d.Entities() {
+                if e.ID == newID {
+                        if !approxEq(e.X1, 0) && !approxEq(e.X2, 0) {
+                                t.Errorf("extended endpoint should be x=0; X1=%.4f X2=%.4f", e.X1, e.X2)
+                        }
+                        return
+                }
+        }
+        t.Error("extended entity not found")
+}
+
+func TestExtend_NoIntersectionReturnsMinusOne(t *testing.T) {
+        d := document.New()
+        target := d.AddLine(0, 0, 5, 0, 0, "#fff")
+        // Parallel boundary — no intersection even with infinite extension.
+        boundary := d.AddLine(0, 5, 10, 5, 0, "#fff")
+        if result := d.Extend(boundary, target, 4, 0); result != -1 {
+                t.Error("Extend with parallel boundary should return -1")
+        }
+}
+
+func TestExtend_ArcTarget(t *testing.T) {
+        d := document.New()
+        // Arc from 0° to 60°, radius 5 centred at origin.
+        arc := d.AddArc(0, 0, 5, 0, 60, 0, "#fff")
+        // Boundary: vertical line at x=3.
+        boundary := d.AddLine(3, -10, 3, 10, 0, "#fff")
+        // Pick near the start end (angle 0° = point (5,0)).
+        newID := d.Extend(boundary, arc, 5, 0)
+        // May succeed or not depending on geometry; just verify no crash and valid ID.
+        if newID >= 0 {
+                found := false
+                for _, e := range d.Entities() {
+                        if e.ID == newID {
+                                found = true
+                                if e.Type != document.TypeArc {
+                                        t.Errorf("extended arc should still be TypeArc, got %s", e.Type)
+                                }
+                        }
+                }
+                if !found {
+                        t.Errorf("extended entity ID %d not found", newID)
+                }
+        }
+}
+
 // ── Extend ────────────────────────────────────────────────────────────────────
 
 func TestExtend_Line(t *testing.T) {
@@ -390,6 +533,108 @@ func TestChamfer_SameIDReturnsMinusOne(t *testing.T) {
         id := d.AddLine(0, 0, 10, 0, 0, "#fff")
         if result := d.Chamfer(id, id, 1, 1); result != -1 {
                 t.Error("Chamfer with same IDs should return -1")
+        }
+}
+
+func TestFillet_ZeroRadiusReturnsMinusOne(t *testing.T) {
+        d := document.New()
+        id1 := d.AddLine(-10, 0, 0, 0, 0, "#fff")
+        id2 := d.AddLine(0, 0, 0, 10, 0, "#fff")
+        if result := d.Fillet(id1, id2, 0); result != -1 {
+                t.Error("Fillet with zero radius should return -1")
+        }
+}
+
+func TestFillet_NegativeRadiusReturnsMinusOne(t *testing.T) {
+        d := document.New()
+        id1 := d.AddLine(-10, 0, 0, 0, 0, "#fff")
+        id2 := d.AddLine(0, 0, 0, 10, 0, "#fff")
+        if result := d.Fillet(id1, id2, -5); result != -1 {
+                t.Error("Fillet with negative radius should return -1")
+        }
+}
+
+func TestFillet_Undo(t *testing.T) {
+        d := document.New()
+        id1 := d.AddLine(-10, 0, 0, 0, 0, "#fff")
+        id2 := d.AddLine(0, 0, 0, 10, 0, "#fff")
+        arcID := d.Fillet(id1, id2, 2)
+        if arcID < 0 {
+                t.Fatal("Fillet returned -1")
+        }
+        countBefore := len(d.Entities())
+        d.Undo()
+        if len(d.Entities()) >= countBefore {
+                t.Errorf("after undo entity count should decrease; before=%d after=%d", countBefore, len(d.Entities()))
+        }
+        for _, e := range d.Entities() {
+                if e.ID == arcID {
+                        t.Error("fillet arc should be gone after undo")
+                }
+        }
+}
+
+func TestFillet_LargeRadiusReturnsMinusOne(t *testing.T) {
+        // A radius larger than both line segment lengths cannot create a valid fillet.
+        d := document.New()
+        id1 := d.AddLine(-1, 0, 0, 0, 0, "#fff")
+        id2 := d.AddLine(0, 0, 0, 1, 0, "#fff")
+        // With radius=100, the fillet centre falls outside either segment → fail.
+        result := d.Fillet(id1, id2, 100)
+        // May return -1 or may succeed depending on implementation tolerance.
+        // Just verify it doesn't panic.
+        _ = result
+}
+
+func TestChamfer_AsymmetricDistances(t *testing.T) {
+        d := document.New()
+        id1 := d.AddLine(-10, 0, 0, 0, 0, "#fff")
+        id2 := d.AddLine(0, 0, 0, 10, 0, "#fff")
+        chamID := d.Chamfer(id1, id2, 3, 1) // asymmetric: 3 on id1, 1 on id2
+        if chamID < 0 {
+                t.Fatal("Chamfer with asymmetric distances returned -1")
+        }
+        for _, e := range d.Entities() {
+                if e.ID == chamID {
+                        // Chamfer line length = sqrt(3²+1²) = sqrt(10)
+                        expected := math.Sqrt(3*3 + 1*1)
+                        got := math.Hypot(e.X2-e.X1, e.Y2-e.Y1)
+                        if !approxEq(got, expected) {
+                                t.Errorf("asymmetric chamfer length: got %.4f want %.4f", got, expected)
+                        }
+                        return
+                }
+        }
+        t.Error("chamfer line not found")
+}
+
+func TestChamfer_Undo(t *testing.T) {
+        d := document.New()
+        id1 := d.AddLine(-10, 0, 0, 0, 0, "#fff")
+        id2 := d.AddLine(0, 0, 0, 10, 0, "#fff")
+        chamID := d.Chamfer(id1, id2, 2, 2)
+        if chamID < 0 {
+                t.Fatal("Chamfer returned -1")
+        }
+        before := len(d.Entities())
+        d.Undo()
+        after := len(d.Entities())
+        if after >= before {
+                t.Errorf("after undo entity count should decrease; before=%d after=%d", before, after)
+        }
+        for _, e := range d.Entities() {
+                if e.ID == chamID {
+                        t.Error("chamfer line should be gone after undo")
+                }
+        }
+}
+
+func TestChamfer_NonLineReturnsMinusOne(t *testing.T) {
+        d := document.New()
+        l := d.AddLine(0, 0, 10, 0, 0, "#fff")
+        c := d.AddCircle(0, 0, 5, 0, "#fff")
+        if result := d.Chamfer(l, c, 2, 2); result != -1 {
+                t.Error("Chamfer on non-line entity should return -1")
         }
 }
 

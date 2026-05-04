@@ -227,9 +227,9 @@ const toolHints = {
   // ── Edit ops ────────────────────────────────────────────────────────────────
   move:       'Select entity, then type: MOVE dx dy  (e.g. MOVE 10 5)',
   copy:       'Select entity, then type: COPY dx dy  (e.g. COPY 10 0)',
-  rotate:     'Select entity, then type: ROTATE angle  (e.g. ROTATE 45)  or ROTATE angle cx cy',
-  scale:      'Select entity, then type: SCALE factor  (e.g. SCALE 2)  or SCALE sx sy cx cy',
-  mirror:     'Click first point on mirror axis, then second point on mirror axis.',
+  rotate:     'Select entity, then type: ROTATE angle [cx cy]  or ROTATECOPY angle [cx cy] to keep original',
+  scale:      'Select entity, then type: SCALE factor [cx cy]  or SCALECOPY factor to keep original',
+  mirror:     'Click two pts on mirror axis to mirror in-place.  Type MIRRORCOPY first to keep the original.',
   trim:       'Click the cutting entity, then click the part of the target to remove.',
   extend:     'Click the boundary entity, then click near the end of the entity to extend.',
   fillet:     'Select first line, then type: FILLET radius  (e.g. FILLET 5) — then click second line.',
@@ -334,10 +334,14 @@ canvas.addEventListener('mousedown', e=>{
     clicks.push([wx,wy]);
     if(clicks.length>=2){
       if(wasmReady&&selectedId){
-        window.cadMirror([selectedId],clicks[0][0],clicks[0][1],clicks[1][0],clicks[1][1],false);
-        setStatus('Mirror applied.');
+        // editPickIds[0]==='copy' means mirror-copy mode (keep original)
+        const makeCopy = editPickIds[0]==='copy';
+        const newIDs=JSON.parse(window.cadMirror([selectedId],
+          clicks[0][0],clicks[0][1],clicks[1][0],clicks[1][1],makeCopy)||'[]');
+        if(makeCopy && newIDs.length>0) selectedId=newIDs[0];
+        setStatus(makeCopy?'Mirror-Copy applied.':'Mirror applied.');
       } else setStatus('Mirror: no entity selected.');
-      clicks=[];
+      editPickIds=[]; clicks=[];
     } else {
       setStatus('Mirror: click second point on the mirror axis.');
     }
@@ -503,19 +507,24 @@ cmdInput.addEventListener('keydown', e=>{
     if(newIDs.length>0) selectedId=newIDs[0];
     render(); return;
   }
-  if(wasmReady && selectedId && verb==='ROTATE' && parts.length>=2){
+  if(wasmReady && selectedId && (verb==='ROTATE'||verb==='ROTATECOPY') && parts.length>=2){
+    const makeCopy = verb==='ROTATECOPY';
     const ang=parseFloat(parts[1]);
-    // ROTATE angle [cx cy]
+    // ROTATE angle [cx cy]  |  ROTATECOPY angle [cx cy]
     const cx=parts.length>=4?parseFloat(parts[2]):0;
     const cy=parts.length>=4?parseFloat(parts[3]):0;
-    window.cadRotate([selectedId],cx,cy,ang,false); render(); return;
+    const newIDs=JSON.parse(window.cadRotate([selectedId],cx,cy,ang,makeCopy)||'[]');
+    if(makeCopy && newIDs.length>0) selectedId=newIDs[0];
+    render(); return;
   }
-  if(wasmReady && selectedId && verb==='SCALE' && parts.length>=2){
+  if(wasmReady && selectedId && (verb==='SCALE'||verb==='SCALECOPY') && parts.length>=2){
     // Supported forms (uniform preferred in hints):
-    //   SCALE factor            → uniform, base at origin
-    //   SCALE factor cx cy      → uniform, base at (cx,cy)
-    //   SCALE sx sy             → non-uniform, base at origin
-    //   SCALE sx sy cx cy       → non-uniform, base at (cx,cy)
+    //   SCALE factor            → uniform in-place, base at origin
+    //   SCALE factor cx cy      → uniform in-place, base at (cx,cy)
+    //   SCALE sx sy             → non-uniform in-place, base at origin
+    //   SCALE sx sy cx cy       → non-uniform in-place, base at (cx,cy)
+    // Append 'COPY' to any form to keep the original (e.g. SCALECOPY 2).
+    const makeCopy = verb==='SCALECOPY';
     const sx=parseFloat(parts[1]);
     let sy=sx, cx=0, cy=0;
     if(parts.length===4){        // SCALE factor cx cy (uniform with base)
@@ -525,7 +534,15 @@ cmdInput.addEventListener('keydown', e=>{
     } else if(parts.length>=5){  // SCALE sx sy cx cy
       sy=parseFloat(parts[2]); cx=parseFloat(parts[3]); cy=parseFloat(parts[4]);
     }
-    window.cadScale([selectedId],cx,cy,sx,sy,false); render(); return;
+    const newIDs=JSON.parse(window.cadScale([selectedId],cx,cy,sx,sy,makeCopy)||'[]');
+    if(makeCopy && newIDs.length>0) selectedId=newIDs[0];
+    render(); return;
+  }
+  if(wasmReady && selectedId && verb==='MIRRORCOPY' && parts.length>=1){
+    // MIRRORCOPY — like Mirror tool but creates a copy; 2 canvas clicks define axis.
+    editPickIds=['copy'];  // flag: copy mode
+    setTool('mirror');
+    setStatus('Mirror-Copy: click first point on mirror axis.'); return;
   }
   if(wasmReady && (currentTool==='fillet') && editPickIds.length===1 && verb==='FILLET' && parts.length>=2){
     // waiting for second line click, radius given via command
