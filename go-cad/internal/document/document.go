@@ -228,12 +228,23 @@ const maxUndoDepth = 100
 
 // ─── Document ─────────────────────────────────────────────────────────────────
 
+// docSnapshot captures a complete, self-consistent document state for undo/redo.
+// Both entities and layer state are included so that import operations (which
+// replace both entities and layers atomically) can be fully undone/redone.
+type docSnapshot struct {
+        entities    []Entity
+        nextID      int
+        layers      map[int]*Layer
+        nextLayerID int
+        curLayer    int
+}
+
 // Document is the in-memory CAD document with undo/redo support.
 type Document struct {
         entities    []Entity
         nextID      int
-        undoStack   [][]Entity
-        redoStack   [][]Entity
+        undoStack   []docSnapshot
+        redoStack   []docSnapshot
         layers      map[int]*Layer // keyed by layer ID
         nextLayerID int
         curLayer    int
@@ -259,10 +270,35 @@ func (d *Document) EntityCount() int { return len(d.entities) }
 
 // ─── Internal helpers ──────────────────────────────────────────────────────────
 
-func (d *Document) snapshot() []Entity {
-        cp := make([]Entity, len(d.entities))
-        copy(cp, d.entities)
-        return cp
+// copyLayers returns a deep copy of the layers map.
+// Layer has only value-type fields so a struct copy is sufficient.
+func copyLayers(src map[int]*Layer) map[int]*Layer {
+        dst := make(map[int]*Layer, len(src))
+        for id, l := range src {
+                cp := *l
+                dst[id] = &cp
+        }
+        return dst
+}
+
+func (d *Document) snapshot() docSnapshot {
+        ents := make([]Entity, len(d.entities))
+        copy(ents, d.entities)
+        return docSnapshot{
+                entities:    ents,
+                nextID:      d.nextID,
+                layers:      copyLayers(d.layers),
+                nextLayerID: d.nextLayerID,
+                curLayer:    d.curLayer,
+        }
+}
+
+func (d *Document) restoreSnapshot(s docSnapshot) {
+        d.entities = s.entities
+        d.nextID = s.nextID
+        d.layers = s.layers
+        d.nextLayerID = s.nextLayerID
+        d.curLayer = s.curLayer
 }
 
 func (d *Document) pushUndo() {
@@ -439,7 +475,7 @@ func (d *Document) Undo() bool {
         }
         d.redoStack = append(d.redoStack, d.snapshot())
         last := len(d.undoStack) - 1
-        d.entities = d.undoStack[last]
+        d.restoreSnapshot(d.undoStack[last])
         d.undoStack = d.undoStack[:last]
         return true
 }
@@ -450,7 +486,7 @@ func (d *Document) Redo() bool {
         }
         d.undoStack = append(d.undoStack, d.snapshot())
         last := len(d.redoStack) - 1
-        d.entities = d.redoStack[last]
+        d.restoreSnapshot(d.redoStack[last])
         d.redoStack = d.redoStack[:last]
         return true
 }
