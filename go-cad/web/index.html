@@ -234,7 +234,12 @@ function commitEntity(){
       window.cadAddLinearDim(c[0][0],c[0][1],c[1][0],c[1][1],off,layer,color); break;
     }
     case 'dimali':{
-      const off=dist(c[0],c[2])*Math.sign(c[2][1]-c[0][1]);
+      // Signed perpendicular distance from third click to the baseline segment.
+      const bx=c[1][0]-c[0][0], by=c[1][1]-c[0][1];
+      const bLen=Math.hypot(bx,by)||1;
+      // Perpendicular unit vector (baseline rotated 90° CCW).
+      const px=-by/bLen, py=bx/bLen;
+      const off=(c[2][0]-c[0][0])*px+(c[2][1]-c[0][1])*py;
       window.cadAddAlignedDim(c[0][0],c[0][1],c[1][0],c[1][1],off,layer,color); break;
     }
     case 'dimang':{
