@@ -305,6 +305,59 @@ func SolveDefault(pts []*geometry.Point, constraints []Constraint) SolveResult {
         return Solve(pts, constraints, defaultMaxIter, defaultTol)
 }
 
+// ─── EqualRadiusConstraint ────────────────────────────────────────────────────
+
+// EqualRadiusConstraint forces two circles/arcs to have the same radius.
+// It directly holds pointers to the radius values so they can be mutated.
+// Callers pass nil for pts — this constraint does not use the point slice.
+type EqualRadiusConstraint struct {
+        RA, RB *float64 // direct pointers to the radius float64 fields
+}
+
+func (c EqualRadiusConstraint) Kind() ConstraintKind { return EqualRadius }
+func (c EqualRadiusConstraint) Entities() []int      { return nil }
+func (c EqualRadiusConstraint) Error(_ []*geometry.Point) float64 {
+        return math.Abs(*c.RA - *c.RB)
+}
+func (c EqualRadiusConstraint) Apply(_ []*geometry.Point) {
+        avg := (*c.RA + *c.RB) / 2
+        *c.RA = avg
+        *c.RB = avg
+}
+
+// ─── TangentArcConstraint ──────────────────────────────────────────────────────
+
+// TangentArcConstraint forces an arc (center=C, radius=R) to be tangent to a
+// line segment (A→B).  Unlike TangentCircleConstraint it references radius by
+// pointer so it works naturally with the EqualRadius / solver plumbing.
+type TangentArcConstraint struct {
+        LineA, LineB int
+        CircleCenter int
+        Radius       *float64 // pointer to the arc's radius
+}
+
+func (c TangentArcConstraint) Kind() ConstraintKind { return Tangent }
+func (c TangentArcConstraint) Entities() []int {
+        return []int{c.LineA, c.LineB, c.CircleCenter}
+}
+func (c TangentArcConstraint) Error(pts []*geometry.Point) float64 {
+        l := geometry.Line{P: *pts[c.LineA], Q: *pts[c.LineB]}
+        dist := math.Abs(l.DistToPoint(*pts[c.CircleCenter]))
+        return math.Abs(dist - *c.Radius)
+}
+func (c TangentArcConstraint) Apply(pts []*geometry.Point) {
+        l := geometry.Line{P: *pts[c.LineA], Q: *pts[c.LineB]}
+        dist := l.DistToPoint(*pts[c.CircleCenter])
+        correction := (*c.Radius - math.Abs(dist)) / 2
+        normal := l.Normal()
+        if dist < 0 {
+                normal = normal.Scale(-1)
+        }
+        delta := normal.Scale(correction)
+        *pts[c.LineA] = pts[c.LineA].Add(delta)
+        *pts[c.LineB] = pts[c.LineB].Add(delta)
+}
+
 // ─── Symmetric constraint ─────────────────────────────────────────────────────
 
 // SymmetricConstraint forces points A and B to be symmetric about the axis A1→A2.

@@ -67,7 +67,8 @@ func (s Segment) Contains(p Point) bool {
 
 // Line represents an infinite line through two points (or a point + direction).
 type Line struct {
-        P, Q Point
+        P Point `json:"p"`
+        Q Point `json:"q"`
 }
 
 // Dir returns the direction vector Q - P (unnormalised).
