@@ -12,9 +12,37 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 #toolbar button{padding:4px 10px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px;white-space:nowrap}
 #toolbar button:hover{background:#505050}
 #toolbar button.active{background:#0078d4;border-color:#0060a8;color:#fff}
+#toolbar button.snap-on{background:#005f1f;border-color:#007a28;color:#6effa0}
 #toolbar .sep{width:1px;height:24px;background:#555;margin:0 4px;flex-shrink:0}
 #layer-sel,#export-fmt{background:#3a3a3a;border:1px solid #555;border-radius:4px;color:#ccc;font-size:12px;padding:3px 6px}
 #color-inp{width:36px;height:26px;border:1px solid #555;border-radius:4px;padding:2px;cursor:pointer;background:transparent}
+
+/* ── Layer Manager Modal ─────────────────────────────────────────────────── */
+#layer-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
+#layer-modal.open{display:flex}
+#layer-panel{background:#252525;border:1px solid #555;border-radius:6px;width:620px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+#layer-panel h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd;display:flex;justify-content:space-between;align-items:center}
+#layer-panel h3 button{padding:2px 8px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
+#layer-table-wrap{overflow-y:auto;flex:1}
+#layer-table{width:100%;border-collapse:collapse;font-size:12px}
+#layer-table th{padding:5px 8px;background:#2d2d2d;border-bottom:1px solid #444;text-align:left;color:#aaa;font-weight:600;white-space:nowrap;position:sticky;top:0}
+#layer-table td{padding:4px 8px;border-bottom:1px solid #333;vertical-align:middle}
+#layer-table tr:hover td{background:#2a2a2a}
+#layer-table input[type=text]{background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:12px;padding:2px 5px;width:100%}
+#layer-table input[type=color]{width:28px;height:22px;border:1px solid #444;border-radius:3px;padding:1px;cursor:pointer;background:transparent}
+.layer-check{cursor:pointer;accent-color:#0078d4}
+.layer-btn{padding:2px 7px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer;white-space:nowrap}
+.layer-btn:hover{background:#505050}
+.layer-del{color:#c0392b;border-color:#7b241c}
+.layer-del:hover{background:#7b241c}
+#layer-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
+#layer-panel-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px}
+#layer-panel-footer button:hover{background:#505050}
+#layer-panel-footer button.primary{background:#0078d4;border-color:#0060a8;color:#fff}
+
+/* ── Snap marker overlay ─────────────────────────────────────────────────── */
+#snap-marker{position:absolute;pointer-events:none;display:none}
+#snap-marker svg{overflow:visible}
 
 #viewport{flex:1;position:relative;overflow:hidden}
 #canvas{display:block;cursor:crosshair}
@@ -77,24 +105,58 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
   <div class="sep"></div>
 
   <!-- Ops -->
-  <button id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
-  <button id="btn-redo"   title="Redo (Ctrl+Y)">Redo</button>
-  <button id="btn-del"    title="Delete selected (Del)">Delete</button>
-  <button id="btn-clear"  title="Clear all">Clear</button>
+  <button id="btn-undo"    title="Undo (Ctrl+Z)">Undo</button>
+  <button id="btn-redo"    title="Redo (Ctrl+Y)">Redo</button>
+  <button id="btn-del"     title="Delete selected (Del)">Delete</button>
+  <button id="btn-clear"   title="Clear all">Clear</button>
   <button id="btn-zoomfit" title="Zoom to fit (ZF)">Fit</button>
   <button id="btn-export"  title="Export DXF">Export</button>
 
   <div class="sep"></div>
 
+  <!-- Snap (Task #5) -->
+  <button id="btn-snap" class="snap-on" title="Object Snap toggle (F3)">Snap ✓</button>
+
+  <div class="sep"></div>
+
+  <!-- Layer controls (Task #5) -->
   <label style="color:#888;font-size:11px">Layer</label>
-  <select id="layer-sel">
-    <option>0</option><option>1</option><option>2</option><option>3</option>
-  </select>
+  <select id="layer-sel" title="Current drawing layer"></select>
+  <button id="btn-layers" title="Layer Manager…">Layers…</button>
   <input type="color" id="color-inp" value="#00ff00" title="Entity colour">
   <select id="export-fmt" title="DXF export format">
     <option value="r2000">R2000</option>
     <option value="r12">R12</option>
   </select>
+</div>
+
+<!-- ── Layer Manager Modal (Task #5) ─────────────────────────────────────── -->
+<div id="layer-modal">
+  <div id="layer-panel">
+    <h3>Layer Manager
+      <button id="btn-add-layer">+ New Layer</button>
+    </h3>
+    <div id="layer-table-wrap">
+      <table id="layer-table">
+        <thead>
+          <tr>
+            <th>Current</th><th>Name</th><th>Color</th>
+            <th title="Visible">Vis</th><th title="Locked">Lck</th>
+            <th title="Frozen">Frz</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="layer-tbody"></tbody>
+      </table>
+    </div>
+    <div id="layer-panel-footer">
+      <button id="btn-close-layers">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Snap marker SVG overlay (Task #5) ─────────────────────────────────── -->
+<div id="snap-marker">
+  <svg width="20" height="20" viewBox="-10 -10 20 20" id="snap-svg"></svg>
 </div>
 
 <!-- ── Drawing canvas ─────────────────────────────────────────────────────── -->
@@ -162,6 +224,20 @@ function installDemoStubs() {
   window.cadArrayRect   = (ids,rows,cols,rs,cs) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){if(r===0&&c===0)continue;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){ne.x1+=c*cs;ne.y1+=r*rs;}if(ne.x2!=null){ne.x2+=c*cs;ne.y2+=r*rs;}if(ne.cx!=null){ne.cx+=c*cs;ne.cy+=r*rs;}if(ne.points)ne.points=ne.points.map(p=>[p[0]+c*cs,p[1]+r*rs]);ents.push(ne);out.push(ne.id);}}); return out; };
   window.cadArrayPolar  = (ids,cx,cy,count,ang) => { const out=[],step=ang/count; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let i=1;i<count;i++){const r=i*step*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r);const rot=(x,y)=>[cx+(x-cx)*cs-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*cs];const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=rot(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=rot(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=rot(ne.cx,ne.cy);}if(ne.points)ne.points=ne.points.map(p=>rot(p[0],p[1]));ents.push(ne);out.push(ne.id);}}); return out; };
   window.cadOffset      = (ids,dist) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(e.type==='line'){const dx=e.x2-e.x1,dy=e.y2-e.y1,len=Math.hypot(dx,dy)||1;const px=-dy/len*dist,py=dx/len*dist;ne.x1+=px;ne.y1+=py;ne.x2+=px;ne.y2+=py;}else if(e.type==='circle'||e.type==='arc'){ne.r=Math.max(0,(e.r||0)+dist);}else{ne.x1=(e.x1||0)+dist;ne.y1=(e.y1||0)+dist;}ents.push(ne);out.push(ne.id);}); return out; };
+  // ── Snap + Layer stubs (Task #5) ────────────────────────────────────────────
+  window.cadFindSnap        = () => '';
+  let _stubLayers = [{id:0,name:'0',color:'#ffffff',lineType:'Solid',lineWeight:0.25,visible:true,locked:false,frozen:false,printEnabled:true}];
+  let _stubCurLayer = 0; let _stubNextLayer=1;
+  window.cadGetLayers        = () => JSON.stringify(_stubLayers);
+  window.cadGetCurrentLayer  = () => _stubCurLayer;
+  window.cadSetCurrentLayer  = id => { _stubCurLayer=id; return true; };
+  window.cadAddLayer         = (name,color) => { const id=_stubNextLayer++; _stubLayers.push({id,name,color,lineType:'Solid',lineWeight:0.25,visible:true,locked:false,frozen:false,printEnabled:true}); return id; };
+  window.cadRemoveLayer      = id => { if(id===0)return false; const i=_stubLayers.findIndex(l=>l.id===id); if(i<0)return false; _stubLayers.splice(i,1); return true; };
+  window.cadSetLayerName     = (id,n)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.name=n; return !!l; };
+  window.cadSetLayerColor    = (id,c)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.color=c; return !!l; };
+  window.cadSetLayerVisible  = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.visible=v; return !!l; };
+  window.cadSetLayerLocked   = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.locked=v; return !!l; };
+  window.cadSetLayerFrozen   = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.frozen=v; render(); return !!l; };
   wasmReady = true;
 }
 
@@ -191,6 +267,136 @@ let currentLayer = 0;
 let currentColor = '#00ff00';
 let pendingText  = null;  // set by command bar for text/mtext tools
 let editPickIds  = [];    // multi-entity pick buffer for edit ops (trim/extend/fillet/chamfer/mirror)
+
+// ─── Snap state (Task #5) ─────────────────────────────────────────────────────
+let snapEnabled = true;
+let snapResult  = null;  // current SnapCandidate {x,y,type,entityID} or null
+const SNAP_RADIUS_PX = 15; // screen pixels — converted to world units on each query
+
+const snapColors = {
+  Endpoint:'#ff4444', Midpoint:'#44ff44', Center:'#4488ff',
+  Quadrant:'#ffaa00', Intersection:'#ff44ff', Perpendicular:'#00ffff',
+  Tangent:'#ffff44', Nearest:'#aaaaaa',
+};
+
+function updateSnapBtn(){
+  const b=document.getElementById('btn-snap');
+  if(snapEnabled){b.className='snap-on';b.textContent='Snap ✓';}
+  else{b.className='';b.textContent='Snap ✗';}
+}
+
+function snapWorldPt(wx, wy){
+  if(!snapEnabled||!wasmReady) return [wx,wy];
+  const worldRadius = SNAP_RADIUS_PX / zoom;
+  const raw = window.cadFindSnap(wx, wy, worldRadius, 0);
+  if(!raw) { snapResult=null; return [wx,wy]; }
+  snapResult = JSON.parse(raw);
+  return [snapResult.x, snapResult.y];
+}
+
+function drawSnapMarker(){
+  const marker = document.getElementById('snap-marker');
+  const svg    = document.getElementById('snap-svg');
+  if(!snapResult||!snapEnabled){marker.style.display='none';return;}
+  const [sx,sy] = w2s(snapResult.x, snapResult.y);
+  const col = snapColors[snapResult.type] || '#ffffff';
+  marker.style.display = 'block';
+  marker.style.left = (sx-10)+'px';
+  marker.style.top  = (sy-10)+'px';
+  // Draw shape based on snap type
+  let shape = '';
+  switch(snapResult.type){
+    case 'Endpoint':
+      shape=`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${col}" stroke-width="1.5"/>`;
+      break;
+    case 'Midpoint':
+      shape=`<polygon points="0,-7 7,5 -7,5" fill="none" stroke="${col}" stroke-width="1.5"/>`;
+      break;
+    case 'Center':
+      shape=`<circle r="6" fill="none" stroke="${col}" stroke-width="1.5"/>
+             <line x1="-4" y1="0" x2="4" y2="0" stroke="${col}" stroke-width="1"/>
+             <line x1="0" y1="-4" x2="0" y2="4" stroke="${col}" stroke-width="1"/>`;
+      break;
+    case 'Quadrant':
+      shape=`<polygon points="0,-7 7,0 0,7 -7,0" fill="none" stroke="${col}" stroke-width="1.5"/>`;
+      break;
+    case 'Intersection':
+      shape=`<line x1="-7" y1="-7" x2="7" y2="7" stroke="${col}" stroke-width="1.5"/>
+             <line x1="7" y1="-7" x2="-7" y2="7" stroke="${col}" stroke-width="1.5"/>`;
+      break;
+    case 'Perpendicular':
+      shape=`<line x1="-7" y1="7" x2="-7" y2="-4" stroke="${col}" stroke-width="1.5"/>
+             <line x1="-7" y1="-4" x2="5" y2="-4" stroke="${col}" stroke-width="1.5"/>
+             <line x1="-7" y1="0" x2="-3" y2="0" stroke="${col}" stroke-width="1"/>
+             <line x1="-3" y1="0" x2="-3" y2="-4" stroke="${col}" stroke-width="1"/>`;
+      break;
+    case 'Tangent':
+      shape=`<circle r="6" fill="none" stroke="${col}" stroke-width="1.5"/>
+             <line x1="-7" y1="0" x2="7" y2="0" stroke="${col}" stroke-width="1.5"/>`;
+      break;
+    default:
+      shape=`<circle r="4" fill="${col}" opacity="0.5"/>`;
+  }
+  svg.innerHTML=shape;
+}
+
+// ─── Layer UI (Task #5) ───────────────────────────────────────────────────────
+
+function refreshLayerSel(){
+  const sel = document.getElementById('layer-sel');
+  const cur = wasmReady ? window.cadGetCurrentLayer() : 0;
+  if(wasmReady){
+    const layers = JSON.parse(window.cadGetLayers()||'[]');
+    sel.innerHTML = layers.map(l=>
+      `<option value="${l.id}"${l.id===cur?' selected':''}>${l.name}</option>`
+    ).join('');
+    currentLayer = cur;
+  } else {
+    if(!sel.options.length) sel.innerHTML='<option value="0">0</option>';
+  }
+}
+
+function openLayerManager(){
+  refreshLayerTable();
+  document.getElementById('layer-modal').classList.add('open');
+}
+function closeLayerManager(){
+  document.getElementById('layer-modal').classList.remove('open');
+  refreshLayerSel();
+}
+
+function refreshLayerTable(){
+  if(!wasmReady) return;
+  const layers = JSON.parse(window.cadGetLayers()||'[]');
+  const cur = window.cadGetCurrentLayer();
+  const tbody = document.getElementById('layer-tbody');
+  tbody.innerHTML = layers.map(l=>`
+    <tr>
+      <td style="text-align:center">
+        <input type="radio" name="cur-layer" class="layer-check"
+          ${l.id===cur?'checked':''}
+          onchange="if(wasmReady)window.cadSetCurrentLayer(${l.id});currentLayer=${l.id};refreshLayerSel()">
+      </td>
+      <td><input type="text" value="${escH(l.name)}" style="width:100px"
+          onblur="if(wasmReady)window.cadSetLayerName(${l.id},this.value);refreshLayerTable()"></td>
+      <td><input type="color" value="${l.color}"
+          oninput="if(wasmReady)window.cadSetLayerColor(${l.id},this.value)"></td>
+      <td style="text-align:center">
+        <input type="checkbox" class="layer-check" ${l.visible?'checked':''}
+          onchange="if(wasmReady)window.cadSetLayerVisible(${l.id},this.checked)"></td>
+      <td style="text-align:center">
+        <input type="checkbox" class="layer-check" ${l.locked?'checked':''}
+          onchange="if(wasmReady)window.cadSetLayerLocked(${l.id},this.checked)"></td>
+      <td style="text-align:center">
+        <input type="checkbox" class="layer-check" ${l.frozen?'checked':''}
+          onchange="if(wasmReady)window.cadSetLayerFrozen(${l.id},this.checked);render()"></td>
+      <td>${l.id!==0?`<button class="layer-btn layer-del"
+          onclick="if(wasmReady)window.cadRemoveLayer(${l.id});refreshLayerTable();refreshLayerSel()">✕</button>`:'—'}</td>
+    </tr>
+  `).join('');
+}
+
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
 const toolClicks = {
   line:2, circle:2, arc:3, rect:2,
@@ -322,7 +528,9 @@ canvas.addEventListener('mousedown', e=>{
   }
   if(!wasmReady) return;
   const rect=canvas.getBoundingClientRect();
-  const [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
+  let [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
+  // Apply snap (Task #5) — snap overrides raw cursor position
+  [wx,wy]=snapWorldPt(wx,wy);
   if((currentTool==='text'||currentTool==='mtext')&&clicks.length===0){
     clicks.push([wx,wy]);
     setStatus('Type your text in the command bar and press Enter.');
@@ -424,9 +632,13 @@ canvas.addEventListener('mousemove', e=>{
     panX=e.clientX-panStart.x; panY=e.clientY-panStart.y; render(); return;
   }
   const rect=canvas.getBoundingClientRect();
-  const [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
+  let [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
+  // Run snap engine (Task #5) — updates snapResult used by drawSnapMarker
+  [wx,wy]=snapWorldPt(wx,wy);
   tempPt=[wx,wy];
-  document.getElementById('coords').textContent=`${wx.toFixed(2)}, ${wy.toFixed(2)}`;
+  const dispX=snapResult?snapResult.x:wx, dispY=snapResult?snapResult.y:wy;
+  document.getElementById('coords').textContent=`${dispX.toFixed(2)}, ${dispY.toFixed(2)}`;
+  drawSnapMarker();
   if(clicks.length>0) render();
 });
 
@@ -615,8 +827,31 @@ document.getElementById('btn-del').addEventListener('click',()=>{
 document.getElementById('btn-clear').addEventListener('click',()=>{if(wasmReady)window.cadClear();render();});
 document.getElementById('btn-zoomfit').addEventListener('click',zoomFit);
 document.getElementById('btn-export').addEventListener('click',exportDXF);
-document.getElementById('layer-sel').addEventListener('change',e=>currentLayer=+e.target.value);
+document.getElementById('layer-sel').addEventListener('change',e=>{
+  currentLayer=+e.target.value;
+  if(wasmReady) window.cadSetCurrentLayer(currentLayer);
+});
 document.getElementById('color-inp').addEventListener('input',e=>currentColor=e.target.value);
+
+// Snap toggle (Task #5)
+document.getElementById('btn-snap').addEventListener('click',()=>{
+  snapEnabled=!snapEnabled; snapResult=null;
+  drawSnapMarker(); updateSnapBtn();
+  setStatus(snapEnabled?'Object Snap ON (F3 to toggle)':'Object Snap OFF (F3 to toggle)');
+});
+
+// Layer Manager (Task #5)
+document.getElementById('btn-layers').addEventListener('click',openLayerManager);
+document.getElementById('btn-close-layers').addEventListener('click',closeLayerManager);
+document.getElementById('btn-add-layer').addEventListener('click',()=>{
+  const name=prompt('New layer name:','Layer '+Date.now());
+  if(!name) return;
+  if(wasmReady) window.cadAddLayer(name,'#ffffff');
+  refreshLayerTable(); refreshLayerSel();
+});
+document.getElementById('layer-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('layer-modal')) closeLayerManager();
+});
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
 document.addEventListener('keydown', e=>{
@@ -626,11 +861,19 @@ document.addEventListener('keydown', e=>{
     if(e.key==='y'||e.key==='Y'){e.preventDefault();if(wasmReady)window.cadRedo();render();}
     return;
   }
+  // F3: toggle Object Snap (Task #5)
+  if(e.key==='F3'){
+    e.preventDefault();
+    snapEnabled=!snapEnabled; snapResult=null;
+    drawSnapMarker(); updateSnapBtn();
+    setStatus(snapEnabled?'Object Snap ON':'Object Snap OFF');
+    return;
+  }
   const map={l:'line',c:'circle',a:'arc',r:'rect',p:'poly',
              s:'spline',n:'nurbs',e:'ellipse',t:'text'};
   if(map[e.key.toLowerCase()]){setTool(map[e.key.toLowerCase()]);return;}
   if(e.key==='Delete'&&wasmReady&&selectedId){window.cadDeleteEntity(selectedId);selectedId=0;render();}
-  if(e.key==='Escape'){clicks=[];render();}
+  if(e.key==='Escape'){clicks=[];snapResult=null;drawSnapMarker();render();}
   if(e.key==='Enter'&&['poly','spline','nurbs'].includes(currentTool)) commitEntity();
 });
 
@@ -720,8 +963,18 @@ function render(){
     ctx.fillText('Loading WASM…',canvas.width/2,canvas.height/2);
     return;
   }
+  // Build a set of frozen/invisible layer IDs to skip rendering (Task #5)
+  const hiddenLayers = new Set();
+  try {
+    const layers=JSON.parse(window.cadGetLayers()||'[]');
+    layers.forEach(l=>{ if(!l.visible||l.frozen) hiddenLayers.add(l.id); });
+  } catch(_){}
+
   const entities=JSON.parse(window.cadEntities()||'[]');
-  entities.forEach(e=>drawEntity(e,e.id===selectedId));
+  entities.forEach(e=>{
+    if(hiddenLayers.has(e.layer)) return; // skip frozen/invisible layers
+    drawEntity(e,e.id===selectedId);
+  });
   drawPreview();
   if(tempPt){
     const [sx,sy]=w2s(tempPt[0],tempPt[1]);
@@ -731,6 +984,7 @@ function render(){
     ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(canvas.width,sy);ctx.stroke();
     ctx.restore();
   }
+  drawSnapMarker();
 }
 
 function drawGrid(){
@@ -1012,6 +1266,8 @@ function drawPreview(){
     installDemoStubs();
     setStatus('Demo mode — serve wasm_exec.js + main.wasm alongside this file for full WASM mode');
   }
+  refreshLayerSel();   // populate layer dropdown (Task #5)
+  updateSnapBtn();     // set initial snap button state (Task #5)
   render();
   setTool('line');
 })();

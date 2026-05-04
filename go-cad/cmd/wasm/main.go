@@ -15,6 +15,7 @@ import (
         "syscall/js"
 
         "go-cad/internal/document"
+        "go-cad/internal/snap"
 )
 
 var doc = document.New()
@@ -463,6 +464,136 @@ func main() {
                 }
                 b, _ := json.Marshal(doc.Offset(jsArrToInts(a[0]), a[1].Float()))
                 return string(b)
+        }))
+
+        // ── Task #5: Snap engine ──────────────────────────────────────────────────
+
+        // cadFindSnap(x, y, radius, mask) → JSON {"x":…,"y":…,"type":"Endpoint","entityID":…} or ""
+        // x,y: cursor in world space; radius: snap radius in world units;
+        // mask: bitmask integer of enabled snap types (0 = all enabled).
+        // Returns empty string when no snap found within radius.
+        js.Global().Set("cadFindSnap", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 4 {
+                        return ""
+                }
+                mask := snap.SnapType(a[3].Int())
+                if mask == 0 {
+                        mask = snap.SnapAll
+                }
+                result := snap.FindSnap(a[0].Float(), a[1].Float(), doc.Entities(), a[2].Float(), mask)
+                if result == nil {
+                        return ""
+                }
+                typeName := snap.SnapNames[result.Type]
+                if typeName == "" {
+                        typeName = "Unknown"
+                }
+                b, _ := json.Marshal(map[string]any{
+                        "x":        result.X,
+                        "y":        result.Y,
+                        "type":     typeName,
+                        "entityID": result.EntityID,
+                })
+                return string(b)
+        }))
+
+        // ── Task #5: Layer system ─────────────────────────────────────────────────
+
+        // cadGetLayers() → JSON [{id,name,color,lineType,lineWeight,visible,locked,frozen,printEnabled}, …]
+        js.Global().Set("cadGetLayers", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+                layers := doc.Layers()
+                type layerJSON struct {
+                        ID           int     `json:"id"`
+                        Name         string  `json:"name"`
+                        Color        string  `json:"color"`
+                        LineType     string  `json:"lineType"`
+                        LineWeight   float64 `json:"lineWeight"`
+                        Visible      bool    `json:"visible"`
+                        Locked       bool    `json:"locked"`
+                        Frozen       bool    `json:"frozen"`
+                        PrintEnabled bool    `json:"printEnabled"`
+                }
+                out := make([]layerJSON, 0, len(layers))
+                for _, l := range layers {
+                        out = append(out, layerJSON{
+                                ID: l.ID, Name: l.Name, Color: l.Color,
+                                LineType: string(l.LineTyp), LineWeight: l.LineWeight,
+                                Visible: l.Visible, Locked: l.Locked,
+                                Frozen: l.Frozen, PrintEnabled: l.PrintEnabled,
+                        })
+                }
+                b, _ := json.Marshal(out)
+                return string(b)
+        }))
+
+        // cadAddLayer(name, color) → layer id (int)
+        // Uses Solid line type and 0.25mm weight as defaults.
+        js.Global().Set("cadAddLayer", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return -1
+                }
+                return doc.AddLayer(a[0].String(), a[1].String(), document.LineTypeSolid, 0.25)
+        }))
+
+        // cadRemoveLayer(id) → bool
+        js.Global().Set("cadRemoveLayer", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 1 {
+                        return false
+                }
+                return doc.RemoveLayer(a[0].Int())
+        }))
+
+        // cadSetLayerName(id, name) → bool
+        js.Global().Set("cadSetLayerName", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.RenameLayer(a[0].Int(), a[1].String())
+        }))
+
+        // cadSetLayerColor(id, color) → bool
+        js.Global().Set("cadSetLayerColor", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerColor(a[0].Int(), a[1].String())
+        }))
+
+        // cadSetLayerVisible(id, visible) → bool
+        js.Global().Set("cadSetLayerVisible", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerVisible(a[0].Int(), a[1].Bool())
+        }))
+
+        // cadSetLayerLocked(id, locked) → bool
+        js.Global().Set("cadSetLayerLocked", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerLocked(a[0].Int(), a[1].Bool())
+        }))
+
+        // cadSetLayerFrozen(id, frozen) → bool
+        js.Global().Set("cadSetLayerFrozen", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return false
+                }
+                return doc.SetLayerFrozen(a[0].Int(), a[1].Bool())
+        }))
+
+        // cadGetCurrentLayer() → int
+        js.Global().Set("cadGetCurrentLayer", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+                return doc.CurrentLayer()
+        }))
+
+        // cadSetCurrentLayer(id) → bool
+        js.Global().Set("cadSetCurrentLayer", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 1 {
+                        return false
+                }
+                return doc.SetCurrentLayer(a[0].Int())
         }))
 
         select {} // block so the Go runtime stays alive

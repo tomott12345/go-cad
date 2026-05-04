@@ -35,10 +35,19 @@ A standalone Go module living under `go-cad/` — a modular, open-source CAD eng
 |---|---|
 | `internal/geometry` | 2-D primitives: Point, BBox, Segment/Line, Circle, Arc, Ellipse, Polyline, Bezier/NURBS splines, Entity interface, full intersection engine |
 | `internal/constraints` | Parametric constraint solver (Coincident, Horizontal, Vertical, Parallel, Perpendicular, EqualLength, Fixed, Midpoint, Tangent, Symmetric) using iterative Gauss-Seidel with pin enforcement |
-| `internal/document` | Core CAD document model (Entity, undo/redo, DXF export) + geometry bridge shim (BoundingBox, ClosestPoint, Offset, IntersectWith) |
-| `cmd/serve` | Dev HTTP server for WASM builds; binds to 127.0.0.1:8080 by default (security fix) |
+| `internal/document` | Core CAD document model (Entity, undo/redo, DXF R2000/R12 export with layer tables) + full layer system (Layer struct, AddLayer, RemoveLayer, RenameLayer, SetLayerColor/Visible/Locked/Frozen) + geometry bridge shim |
+| `internal/snap` | Object-snap engine: FindSnap evaluates all entity types for Endpoint, Midpoint, Center, Quadrant, Intersection, Perpendicular, Tangent, Nearest with priority ordering and bitmask control |
+| `cmd/serve` | Dev HTTP server for WASM builds; binds to 127.0.0.1:8080 by default |
+| `cmd/wasm` | WASM bridge: snap (cadFindSnap) + full layer CRUD (cadGetLayers, cadAddLayer, cadRemoveLayer, cadSetLayerName/Color/Visible/Locked/Frozen, cadGetCurrentLayer, cadSetCurrentLayer) |
 
 ### Key commands
-- `cd go-cad && go test ./...` — run all tests (geometry, constraints, document)
+- `cd go-cad && go test ./...` — run all tests (geometry, constraints, document, snap)
 - `cd go-cad && go build ./cmd/serve` — build the dev server
 - WASM build: `GOOS=js GOARCH=wasm go build -o web/main.wasm ./cmd/wasm`
+
+### Task #5 features (Object Snap + Full Layer System)
+- **Snap engine** (`internal/snap`): 8 snap types with priority ordering; `FindSnap` package-level function callable from WASM bridge
+- **Layer system** (`internal/document/layers.go`): Full Layer struct (ID, Name, Color, LineTyp, LineWeight, Visible, Locked, Frozen, PrintEnabled); default layer 0 protected from deletion; Save/Load persists all layer state
+- **DXF export**: All DXF helpers take `layer string`; DXF layer table written (`writeDXFLayerTable`); diameter dim lines fully fixed
+- **WASM bridge**: `cadFindSnap(x,y,radius,mask)` → JSON snap result; complete layer CRUD API
+- **Browser UI**: Snap marker SVG overlay with type-specific symbols and colors; F3 key toggle; Layer Manager modal with live editing (name, color, visibility, lock, freeze); frozen/invisible layers hidden from canvas; layer dropdown synced with document state
