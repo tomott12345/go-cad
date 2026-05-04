@@ -1032,8 +1032,16 @@ cmdInput.addEventListener('keydown', e=>{
       ids=[selectedId];
     }
     if(ids.length===0){ setStatus('DEFINEBLOCK: select at least one entity or list IDs'); cmdInput.value=''; return; }
-    // Use first entity's position as base point.
-    const bx=0, by=0;
+    // Derive base point from the first entity's position (x1/y1 or cx/cy).
+    // This shifts all block-local entities so the base point becomes the origin,
+    // which gives INSERT a sensible reference point matching the entity's location.
+    const entities = JSON.parse(window.cadEntities()||'[]');
+    const firstEnt = entities.find(e=>e.id===ids[0]);
+    let bx=0, by=0;
+    if(firstEnt){
+      if(firstEnt.type==='circle'||firstEnt.type==='arc'){ bx=firstEnt.cx||0; by=firstEnt.cy||0; }
+      else { bx=firstEnt.x1||0; by=firstEnt.y1||0; }
+    }
     const ok=window.cadDefineBlock(bname,bx,by,JSON.stringify(ids));
     if(ok){ invalidateBlockCache(bname); setStatus(`Block "${bname}" defined with ${ids.length} entity(s).`); }
     else setStatus(`DEFINEBLOCK failed — ensure entity IDs exist.`);

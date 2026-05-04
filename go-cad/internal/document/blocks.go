@@ -17,6 +17,10 @@ type Block struct {
         BaseX    float64  `json:"baseX"`
         BaseY    float64  `json:"baseY"`
         Entities []Entity `json:"entities"` // block-local coords (base = origin)
+        // Builtin marks symbols registered at startup (e.g. CENTER_MARK).
+        // It is not serialised: built-ins are always re-registered by the host
+        // and must survive document Load().
+        Builtin bool `json:"-"`
 }
 
 // copyBlock returns a deep copy of a Block.
@@ -25,7 +29,7 @@ func copyBlock(b *Block) *Block {
         for i, e := range b.Entities {
                 ents[i] = deepCopyEntity(e)
         }
-        return &Block{Name: b.Name, BaseX: b.BaseX, BaseY: b.BaseY, Entities: ents}
+        return &Block{Name: b.Name, BaseX: b.BaseX, BaseY: b.BaseY, Entities: ents, Builtin: b.Builtin}
 }
 
 // copyBlocks returns a deep copy of the blocks map.
@@ -110,7 +114,7 @@ func (d *Document) DefineBlockRaw(name string, baseX, baseY float64, ents []Enti
         for i, e := range ents {
                 cp[i] = deepCopyEntity(e)
         }
-        d.blocks[name] = &Block{Name: name, BaseX: baseX, BaseY: baseY, Entities: cp}
+        d.blocks[name] = &Block{Name: name, BaseX: baseX, BaseY: baseY, Entities: cp, Builtin: true}
 }
 
 // ─── InsertBlock ──────────────────────────────────────────────────────────────

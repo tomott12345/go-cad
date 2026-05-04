@@ -710,11 +710,27 @@ func (d *Document) Load(path string) error {
                         d.layers = map[int]*Layer{0: defaultLayer0()}
                         d.nextLayerID = 1
                 }
-                // Task #7: always reset blocks from saved state.
-                // If the saved doc had no blocks (nil map), we explicitly clear
-                // d.blocks so stale definitions from a previously-open document
-                // do not leak into the newly-loaded one.
-                d.blocks = state.Blocks
+                // Task #7: merge saved user blocks, preserving built-in symbols
+                // (Builtin=true, registered at startup) that are absent from
+                // older saves.  User blocks in the saved state override built-ins
+                // with the same name; blocks absent from the saved state and not
+                // built-in are removed (preventing stale user-block leakage).
+                {
+                        merged := make(map[string]*Block)
+                        for name, blk := range d.blocks {
+                                if blk.Builtin {
+                                        merged[name] = blk // keep built-ins
+                                }
+                        }
+                        for name, blk := range state.Blocks {
+                                merged[name] = blk // loaded blocks override
+                        }
+                        if len(merged) > 0 {
+                                d.blocks = merged
+                        } else {
+                                d.blocks = nil
+                        }
+                }
                 for _, e := range d.entities {
                         if e.ID >= d.nextID {
                                 d.nextID = e.ID + 1
