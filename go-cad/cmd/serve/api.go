@@ -148,7 +148,10 @@ func (h *apiHandler) postSave(w http.ResponseWriter, r *http.Request) {
                 Path string `json:"path"`
         }
         if r.ContentLength > 0 {
-                _ = json.NewDecoder(r.Body).Decode(&body)
+                if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+                        writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+                        return
+                }
         }
         if body.Path == "" {
                 body.Path = "go-cad-document.json"

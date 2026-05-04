@@ -283,6 +283,17 @@ func TestSaveLoad(t *testing.T) {
         }
 }
 
+func TestSave_BadJSON(t *testing.T) {
+        _, mux := newTestAPI()
+        req := httptest.NewRequest(http.MethodPost, "/api/v1/document/save", bytes.NewBufferString("{bad json"))
+        req.ContentLength = 9
+        rec := httptest.NewRecorder()
+        mux.ServeHTTP(rec, req)
+        if rec.Code != http.StatusBadRequest {
+                t.Fatalf("expected 400 on bad JSON, got %d: %s", rec.Code, rec.Body)
+        }
+}
+
 func TestLoad_MissingPath(t *testing.T) {
         _, mux := newTestAPI()
         rec := doRequest(t, mux, http.MethodPost, "/api/v1/document/load", map[string]string{"path": ""})
