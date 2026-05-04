@@ -2,6 +2,7 @@ package main
 
 import (
         "encoding/json"
+        "errors"
         "net/http"
         "strconv"
         "strings"
@@ -207,7 +208,12 @@ func (h *apiHandler) postCommand(w http.ResponseWriter, r *http.Request) {
                 return
         }
         if err := h.host.ExecuteCommand(body.Command, body.Args); err != nil {
-                writeError(w, http.StatusNotFound, err.Error())
+                var notFound *pluginhost.ErrCommandNotFound
+                if errors.As(err, &notFound) {
+                        writeError(w, http.StatusNotFound, err.Error())
+                } else {
+                        writeError(w, http.StatusInternalServerError, err.Error())
+                }
                 return
         }
         writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

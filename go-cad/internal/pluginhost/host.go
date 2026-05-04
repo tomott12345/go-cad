@@ -14,10 +14,33 @@ import (
         "go-cad/pkg/plugin"
 )
 
+// ErrCommandNotFound is returned by ExecuteCommand when no command with the
+// given name (or alias) has been registered.  REST handlers should map this
+// to HTTP 404; all other errors should become HTTP 500.
+type ErrCommandNotFound struct{ Name string }
+
+func (e *ErrCommandNotFound) Error() string {
+        return "pluginhost: command " + e.Name + " not found"
+}
+
 // Host wires plugins to the CAD document.
+//
+// # Path-based plugin loading
+//
+// Host intentionally does not own path resolution.  Callers use
+// pkg/plugin/loader to obtain a plugin.Plugin from a .so or subprocess binary,
+// then pass it to Host.LoadPlugin.  This keeps pluginhost free of
+// platform-specific loader imports.
+//
+// # Goroutine safety
+//
+// Host is safe for concurrent use: all plugin-registry maps (plugins, tools,
+// commands, subs) are protected by mu, and all document mutations are
+// serialised through docMu.
 type Host struct {
         doc      *document.Document
-        mu       sync.RWMutex
+        mu       sync.RWMutex // protects plugin/tool/command/subscription maps
+        docMu    sync.Mutex   // serialises all document read/write operations
         plugins  map[string]plugin.Plugin
         tools    map[string]plugin.ToolDescriptor
         commands map[string]plugin.CommandDescriptor
@@ -45,6 +68,7 @@ func New(doc *document.Document) *Host {
 
 // AddEntity adds an entity to the document and fires EntityAdded.
 func (h *Host) AddEntity(e plugin.Entity) (int, error) {
+        h.docMu.Lock()
         id := h.doc.AddEntity(document.Entity{
                 Type:     e.Type,
                 Layer:    e.Layer,
@@ -55,6 +79,7 @@ func (h *Host) AddEntity(e plugin.Entity) (int, error) {
                 StartDeg: e.StartDeg, EndDeg: e.EndDeg,
                 Points:   e.Points,
         })
+        h.docMu.Unlock()
         if id < 0 {
                 return 0, fmt.Errorf("pluginhost: AddEntity: unknown type %q", e.Type)
         }
@@ -64,7 +89,9 @@ func (h *Host) AddEntity(e plugin.Entity) (int, error) {
 
 // DeleteEntity removes an entity and fires EntityDeleted if successful.
 func (h *Host) DeleteEntity(id int) bool {
+        h.docMu.Lock()
         ok := h.doc.DeleteEntity(id)
+        h.docMu.Unlock()
         if ok {
                 h.emit(plugin.Event{Kind: plugin.EntityDeleted, Payload: id})
         }
@@ -73,7 +100,9 @@ func (h *Host) DeleteEntity(id int) bool {
 
 // GetEntities returns a snapshot of all document entities converted to plugin.Entity.
 func (h *Host) GetEntities() []plugin.Entity {
+        h.docMu.Lock()
         src := h.doc.Entities()
+        h.docMu.Unlock()
         out := make([]plugin.Entity, len(src))
         for i, de := range src {
                 out[i] = docToPlugin(de)
@@ -83,7 +112,9 @@ func (h *Host) GetEntities() []plugin.Entity {
 
 // GetDocument returns metadata about the current document.
 func (h *Host) GetDocument() plugin.DocumentInfo {
+        h.docMu.Lock()
         entities := h.doc.Entities()
+        h.docMu.Unlock()
         layerSet := map[int]struct{}{}
         minX, minY := math.Inf(1), math.Inf(1)
         maxX, maxY := math.Inf(-1), math.Inf(-1)
@@ -183,13 +214,14 @@ func (h *Host) emit(ev plugin.Event) {
         }
 }
 
-// ─── Plugin management ────────────────────────────────────────────────────────
-
 // ─── Document save / load (with event emission) ───────────────────────────────
 
 // SaveDocument persists the document to path and fires DocumentSaved.
 func (h *Host) SaveDocument(path string) error {
-        if err := h.doc.Save(path); err != nil {
+        h.docMu.Lock()
+        err := h.doc.Save(path)
+        h.docMu.Unlock()
+        if err != nil {
                 return err
         }
         h.emit(plugin.Event{Kind: plugin.DocumentSaved, Payload: path})
@@ -198,7 +230,10 @@ func (h *Host) SaveDocument(path string) error {
 
 // LoadDocument replaces the document from path and fires DocumentLoaded.
 func (h *Host) LoadDocument(path string) error {
-        if err := h.doc.Load(path); err != nil {
+        h.docMu.Lock()
+        err := h.doc.Load(path)
+        h.docMu.Unlock()
+        if err != nil {
                 return err
         }
         h.emit(plugin.Event{Kind: plugin.DocumentLoaded, Payload: path})
@@ -245,12 +280,14 @@ func (h *Host) ListPlugins() []plugin.PluginInfo {
 }
 
 // ExecuteCommand dispatches a registered command by name.
+// Returns *ErrCommandNotFound if the name (or alias) has not been registered.
+// Any other error originates from the command handler itself.
 func (h *Host) ExecuteCommand(name string, args []string) error {
         h.mu.RLock()
         cd, ok := h.commands[name]
         h.mu.RUnlock()
         if !ok {
-                return fmt.Errorf("pluginhost: command %q not found", name)
+                return &ErrCommandNotFound{Name: name}
         }
         return cd.Handler(args)
 }
