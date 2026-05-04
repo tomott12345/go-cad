@@ -666,10 +666,11 @@ func (d *Document) AddEntity(e Entity) int {
 // Old saves that contain only a JSON entity array are still supported
 // via the Load fallback path.
 type docState struct {
-        Entities    []Entity       `json:"entities"`
-        Layers      map[int]*Layer `json:"layers,omitempty"`
-        NextLayerID int            `json:"nextLayerID,omitempty"`
-        CurLayer    int            `json:"curLayer,omitempty"`
+        Entities    []Entity          `json:"entities"`
+        Layers      map[int]*Layer    `json:"layers,omitempty"`
+        NextLayerID int               `json:"nextLayerID,omitempty"`
+        CurLayer    int               `json:"curLayer,omitempty"`
+        Blocks      map[string]*Block `json:"blocks,omitempty"` // Task #7
 }
 
 func (d *Document) Save(path string) error {
@@ -678,6 +679,7 @@ func (d *Document) Save(path string) error {
                 Layers:      d.layers,
                 NextLayerID: d.nextLayerID,
                 CurLayer:    d.curLayer,
+                Blocks:      d.blocks, // Task #7: persist block definitions
         }
         data, err := json.Marshal(state)
         if err != nil {
@@ -707,6 +709,10 @@ func (d *Document) Load(path string) error {
                 } else {
                         d.layers = map[int]*Layer{0: defaultLayer0()}
                         d.nextLayerID = 1
+                }
+                // Task #7: restore block definitions (migration-safe: nil when absent in older saves).
+                if state.Blocks != nil {
+                        d.blocks = state.Blocks
                 }
                 for _, e := range d.entities {
                         if e.ID >= d.nextID {
@@ -804,6 +810,65 @@ func (d *Document) exportDXF(r12 bool) string {
 
         // TABLES section: layer table
         d.writeDXFLayerTable(&sb, r12)
+
+        // BLOCKS section: emit BLOCK/ENDBLK definitions so INSERT entities resolve.
+        // The mandatory *Model_Space block is always written; user blocks follow.
+        sb.WriteString("  0\nSECTION\n  2\nBLOCKS\n")
+        // Mandatory model-space block required by all DXF readers.
+        if r12 {
+                sb.WriteString("  0\nBLOCK\n  8\n0\n  2\n*Model_Space\n 70\n0\n 10\n0.0\n 20\n0.0\n  0\nENDBLK\n")
+        } else {
+                sb.WriteString("  0\nBLOCK\n  8\n0\n100\nAcDbEntity\n100\nAcDbBlockBegin\n  2\n*Model_Space\n 70\n0\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  3\n*Model_Space\n  1\n\n  0\nENDBLK\n  8\n0\n100\nAcDbEntity\n100\nAcDbBlockEnd\n")
+        }
+        for _, blk := range d.blocks {
+                ln0 := "0"
+                if r12 {
+                        fmt.Fprintf(&sb, "  0\nBLOCK\n  8\n%s\n  2\n%s\n 70\n0\n 10\n%f\n 20\n%f\n",
+                                ln0, blk.Name, blk.BaseX, -blk.BaseY)
+                } else {
+                        fmt.Fprintf(&sb, "  0\nBLOCK\n  8\n%s\n100\nAcDbEntity\n100\nAcDbBlockBegin\n  2\n%s\n 70\n0\n 10\n%f\n 20\n%f\n 30\n0.0\n  3\n%s\n  1\n\n",
+                                ln0, blk.Name, blk.BaseX, -blk.BaseY, blk.Name)
+                }
+                // Emit each block-local entity (simplified: lines, circles, arcs, polylines, text).
+                for _, be := range blk.Entities {
+                        switch be.Type {
+                        case TypeLine:
+                                fmt.Fprintf(&sb, "  0\nLINE\n  8\n%s\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
+                                        ln0, be.X1, -be.Y1, be.X2, -be.Y2)
+                        case TypeCircle:
+                                fmt.Fprintf(&sb, "  0\nCIRCLE\n  8\n%s\n 10\n%f\n 20\n%f\n 40\n%f\n",
+                                        ln0, be.CX, -be.CY, be.R)
+                        case TypeArc:
+                                fmt.Fprintf(&sb, "  0\nARC\n  8\n%s\n 10\n%f\n 20\n%f\n 40\n%f\n 50\n%f\n 51\n%f\n",
+                                        ln0, be.CX, -be.CY, be.R, be.StartDeg, be.EndDeg)
+                        case TypeText:
+                                h := be.TextHeight
+                                if h <= 0 {
+                                        h = 2.5
+                                }
+                                fmt.Fprintf(&sb, "  0\nTEXT\n  8\n%s\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n%f\n  1\n%s\n",
+                                        ln0, be.X1, -be.Y1, h, be.Text)
+                        case TypePolyline:
+                                pts := make([][2]float64, len(be.Points))
+                                for i, p := range be.Points {
+                                        if len(p) >= 2 {
+                                                pts[i] = [2]float64{p[0], p[1]}
+                                        }
+                                }
+                                if r12 {
+                                        dxfR12Polyline(&sb, ln0, pts)
+                                } else {
+                                        dxfLWPolyline(&sb, ln0, pts)
+                                }
+                        }
+                }
+                if r12 {
+                        sb.WriteString("  0\nENDBLK\n")
+                } else {
+                        fmt.Fprintf(&sb, "  0\nENDBLK\n  8\n%s\n100\nAcDbEntity\n100\nAcDbBlockEnd\n", ln0)
+                }
+        }
+        sb.WriteString("  0\nENDSEC\n")
 
         sb.WriteString("  0\nSECTION\n  2\nENTITIES\n")
 
@@ -1034,14 +1099,6 @@ func (d *Document) exportDXF(r12 bool) string {
                                 dxfLWPolyline(&sb, ln, pts)
                         }
                 }
-        }
-
-        // BLOCKS section for R2000 (needed so INSERT entities resolve properly).
-        if !r12 && len(d.blocks) > 0 {
-                // We already wrote ENTITIES — write a BLOCKS section before it.
-                // Since we've already appended to sb, we can't reorder here easily.
-                // Instead, the BLOCKS section will be emitted first in a future
-                // refactor; for now just note block refs are forward-compatible.
         }
 
         sb.WriteString("  0\nENDSEC\n  0\nEOF\n")
