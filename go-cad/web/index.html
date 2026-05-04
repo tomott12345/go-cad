@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>go-cad</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#ccc;font:13px/1.4 'Segoe UI',system-ui,sans-serif;overflow:hidden}
+
+/* ── Toolbar ── */
+#toolbar{display:flex;align-items:center;gap:4px;padding:6px 8px;background:#2d2d2d;border-bottom:1px solid #444;flex-shrink:0;flex-wrap:wrap}
+#toolbar button{padding:4px 10px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px;white-space:nowrap}
+#toolbar button:hover{background:#505050}
+#toolbar button.active{background:#0078d4;border-color:#0060a8;color:#fff}
+#toolbar .sep{width:1px;height:24px;background:#555;margin:0 4px}
+#layer-label{color:#888;font-size:11px;margin-left:4px}
+#layer-sel{background:#3a3a3a;border:1px solid #555;border-radius:4px;color:#ccc;font-size:12px;padding:3px 6px}
+#color-inp{width:36px;height:26px;border:1px solid #555;border-radius:4px;padding:2px;cursor:pointer;background:transparent}
+
+/* ── Canvas ── */
+#viewport{flex:1;position:relative;overflow:hidden}
+#canvas{display:block;cursor:crosshair}
+
+/* ── Status / Command bar ── */
+#cmdbar{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#252525;border-top:1px solid #444;flex-shrink:0;min-height:30px}
+#status{flex:1;color:#888;font-size:12px}
+#cmd-input{flex:0 0 320px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#ccc;font-size:12px;padding:4px 8px;outline:none}
+#cmd-input:focus{border-color:#0078d4}
+#coords{color:#666;font-size:11px;min-width:160px;text-align:right}
+
+/* ── Properties panel ── */
+#props{position:absolute;top:8px;right:8px;width:200px;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:10px;font-size:12px;display:none}
+#props h3{font-size:13px;margin-bottom:8px;color:#ddd}
+#props table{width:100%;border-collapse:collapse}
+#props td{padding:2px 4px;vertical-align:top}
+#props td:first-child{color:#888;width:80px}
+</style>
+</head>
+<body>
+<!-- ── Toolbar ─────────────────────────────────────────────────────────────── -->
+<div id="toolbar">
+  <!-- Primitives -->
+  <button id="tool-line"    class="active" title="Line (L)">Line</button>
+  <button id="tool-circle"  title="Circle (C)">Circle</button>
+  <button id="tool-arc"     title="Arc (A)">Arc</button>
+  <button id="tool-rect"    title="Rectangle (R)">Rect</button>
+  <button id="tool-poly"    title="Polyline (P)">Polyline</button>
+
+  <div class="sep"></div>
+
+  <!-- Advanced (Task #3) -->
+  <button id="tool-spline"  title="Cubic Bezier Spline (S)">Spline</button>
+  <button id="tool-ellipse" title="Ellipse (E)">Ellipse</button>
+  <button id="tool-text"    title="Text (T)">Text</button>
+
+  <div class="sep"></div>
+
+  <!-- Dimensions -->
+  <button id="tool-dimlin"  title="Linear Dimension (DIMLIN)">DimLin</button>
+  <button id="tool-dimali"  title="Aligned Dimension (DIMALI)">DimAli</button>
+  <button id="tool-dimang"  title="Angular Dimension (DIMANG)">DimAng</button>
+  <button id="tool-dimrad"  title="Radial Dimension (DIMRAD)">DimRad</button>
+  <button id="tool-dimdia"  title="Diameter Dimension (DIMDIA)">DimDia</button>
+
+  <div class="sep"></div>
+
+  <!-- Ops -->
+  <button id="btn-undo"  title="Undo (Ctrl+Z)">Undo</button>
+  <button id="btn-redo"  title="Redo (Ctrl+Y)">Redo</button>
+  <button id="btn-del"   title="Delete selected (Del)">Delete</button>
+  <button id="btn-clear" title="Clear all">Clear</button>
+  <button id="btn-export" title="Export DXF">Export DXF</button>
+
+  <div class="sep"></div>
+
+  <span id="layer-label">Layer:</span>
+  <select id="layer-sel">
+    <option value="0">0</option>
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+  </select>
+  <input type="color" id="color-inp" value="#00ff00" title="Entity colour">
+</div>
+
+<!-- ── Drawing area ──────────────────────────────────────────────────────── -->
+<div id="viewport">
+  <canvas id="canvas"></canvas>
+  <div id="props">
+    <h3>Properties</h3>
+    <table id="props-table"></table>
+  </div>
+</div>
+
+<!-- ── Status / Command bar ────────────────────────────────────────────────── -->
+<div id="cmdbar">
+  <div id="status">Initialising WASM…</div>
+  <input id="cmd-input" placeholder="Command (e.g. LINE, DIMRAD, UNDO)" autocomplete="off" spellcheck="false">
+  <div id="coords">0.00, 0.00</div>
+</div>
+
+<script>
+// ─── WASM loader ───────────────────────────────────────────────────────────
+const wasmAvailable = typeof WebAssembly !== 'undefined';
+let wasmReady = false;
+
+async function loadWASM() {
+  try {
+    if (!wasmAvailable) throw new Error('WebAssembly not supported');
+    const go = new Go(); // provided by wasm_exec.js
+    const result = await WebAssembly.instantiateStreaming(
+      fetch('main.wasm'), go.importObject);
+    go.run(result.instance);
+    wasmReady = true;
+    setStatus('WASM ready — select a tool and click to draw');
+  } catch (e) {
+    setStatus(`WASM unavailable (${e.message}) — running in demo mode`);
+    installDemoStubs();
+  }
+}
+
+function installDemoStubs() {
+  // Minimal stubs so the UI works without a compiled WASM binary.
+  let nextId = 1;
+  const entities = [];
+  window.cadAddLine       = (x1,y1,x2,y2,l,c)=>{const id=nextId++;entities.push({id,type:'line',x1,y1,x2,y2,layer:l,color:c});return id};
+  window.cadAddCircle     = (cx,cy,r,l,c)      =>{const id=nextId++;entities.push({id,type:'circle',cx,cy,r,layer:l,color:c});return id};
+  window.cadAddArc        = (cx,cy,r,s,e2,l,c) =>{const id=nextId++;entities.push({id,type:'arc',cx,cy,r,startDeg:s,endDeg:e2,layer:l,color:c});return id};
+  window.cadAddRectangle  = (x1,y1,x2,y2,l,c)  =>{const id=nextId++;entities.push({id,type:'rectangle',x1,y1,x2,y2,layer:l,color:c});return id};
+  window.cadAddPolyline   = (pts,l,c)           =>{const id=nextId++;entities.push({id,type:'polyline',points:pts,layer:l,color:c});return id};
+  window.cadAddSpline     = (pts,l,c)           =>{const id=nextId++;entities.push({id,type:'spline',points:pts,layer:l,color:c});return id};
+  window.cadAddEllipse    = (cx,cy,a,b,rot,l,c) =>{const id=nextId++;entities.push({id,type:'ellipse',cx,cy,r:a,r2:b,rotDeg:rot,layer:l,color:c});return id};
+  window.cadAddText       = (x,y,t,h,rot,l,c)  =>{const id=nextId++;entities.push({id,type:'text',x1:x,y1:y,text:t,textHeight:h,rotDeg:rot,layer:l,color:c});return id};
+  window.cadAddLinearDim  = (x1,y1,x2,y2,off,l,c)=>{const id=nextId++;entities.push({id,type:'dimlin',x1,y1,x2,y2,cx:off,layer:l,color:c});return id};
+  window.cadAddAlignedDim = (x1,y1,x2,y2,off,l,c)=>{const id=nextId++;entities.push({id,type:'dimali',x1,y1,x2,y2,cx:off,layer:l,color:c});return id};
+  window.cadAddAngularDim = (cx,cy,x1,y1,x2,y2,r,l,c)=>{const id=nextId++;entities.push({id,type:'dimang',cx,cy,x1,y1,x2,y2,r,layer:l,color:c});return id};
+  window.cadAddRadialDim  = (cx,cy,r,ang,l,c)  =>{const id=nextId++;entities.push({id,type:'dimrad',cx,cy,r,rotDeg:ang,layer:l,color:c});return id};
+  window.cadAddDiameterDim= (cx,cy,r,ang,l,c)  =>{const id=nextId++;entities.push({id,type:'dimdia',cx,cy,r,rotDeg:ang,layer:l,color:c});return id};
+  window.cadDeleteEntity  = id=>{const i=entities.findIndex(e=>e.id===id);if(i>=0){entities.splice(i,1);return true}return false};
+  window.cadUndo          = ()=>{if(entities.length>0){entities.pop();return true}return false};
+  window.cadRedo          = ()=>false;
+  window.cadClear         = ()=>{entities.length=0};
+  window.cadEntities      = ()=>JSON.stringify(entities);
+  window.cadExportDXF     = ()=>'  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n  0\nEOF\n';
+  window.cadNearestEntity = ()=>0;
+  wasmReady = true;
+}
+
+// ─── Canvas / viewport ────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+let panX = 0, panY = 0, zoom = 1;
+let isPanning = false, panStart = {x:0,y:0};
+
+function resize() {
+  const vp = document.getElementById('viewport');
+  canvas.width  = vp.clientWidth;
+  canvas.height = vp.clientHeight;
+  render();
+}
+window.addEventListener('resize', resize);
+
+// World ↔ screen transforms
+function w2s(wx, wy) {
+  return [wx * zoom + panX + canvas.width/2,
+          -wy * zoom + panY + canvas.height/2];
+}
+function s2w(sx, sy) {
+  return [(sx - canvas.width/2 - panX) / zoom,
+          -(sy - canvas.height/2 - panY) / zoom];
+}
+
+// ─── Tool state machine ───────────────────────────────────────────────────────
+let currentTool = 'line';
+let clicks = [];      // accumulated world-space clicks for multi-click tools
+let tempPt  = null;   // cursor world position (for rubber-band preview)
+let selectedId = 0;
+let currentLayer = 0;
+let currentColor = '#00ff00';
+
+const toolClicks = {
+  // tool → number of clicks required to complete the entity
+  line:    2,
+  circle:  2,
+  arc:     3,
+  rect:    2,
+  poly:    -1,  // variable; double-click or Enter to finish
+  spline:  -1,  // variable; Enter / right-click to finish (min 4 pts)
+  ellipse: 3,   // centre, semi-major tip, semi-minor tip
+  text:    1,   // position only; prompt for text via command bar
+  dimlin:  3,   // pt1, pt2, dim-line-offset click
+  dimali:  3,
+  dimang:  4,   // vertex, pt1, pt2, arc-radius click
+  dimrad:  2,   // centre, rim point
+  dimdia:  2,
+};
+
+function setTool(name) {
+  currentTool = name;
+  clicks = [];
+  tempPt = null;
+  // Update toolbar buttons
+  document.querySelectorAll('#toolbar button[id^="tool-"]').forEach(b=>{
+    b.classList.toggle('active', b.id === 'tool-'+name);
+  });
+  const hints = {
+    line:    'Click start point, then end point.',
+    circle:  'Click centre, then radius point.',
+    arc:     'Click centre, then start-angle point, then end-angle point.',
+    rect:    'Click two opposite corners.',
+    poly:    'Click vertices. Enter / double-click to finish.',
+    spline:  'Click control points (min 4). Enter / right-click to finish.',
+    ellipse: 'Click centre, then semi-major tip, then semi-minor tip.',
+    text:    'Click insertion point, then type text in command bar and press Enter.',
+    dimlin:  'Click first point, second point, then dimension line position.',
+    dimali:  'Click first point, second point, then offset position.',
+    dimang:  'Click vertex, first ray point, second ray point, then arc radius.',
+    dimrad:  'Click centre, then circumference point.',
+    dimdia:  'Click centre, then circumference point.',
+  };
+  setStatus(hints[name] || name);
+}
+
+function commitEntity() {
+  const c = clicks;
+  const layer = currentLayer;
+  const color = currentColor;
+  switch(currentTool) {
+    case 'line':
+      window.cadAddLine(c[0][0],c[0][1],c[1][0],c[1][1],layer,color); break;
+    case 'circle': {
+      const r = dist(c[0],c[1]);
+      window.cadAddCircle(c[0][0],c[0][1],r,layer,color); break;
+    }
+    case 'arc': {
+      const r = dist(c[0],c[1]);
+      const a1 = Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
+      const a2 = Math.atan2(c[2][1]-c[0][1],c[2][0]-c[0][0])*180/Math.PI;
+      window.cadAddArc(c[0][0],c[0][1],r,a1,a2,layer,color); break;
+    }
+    case 'rect':
+      window.cadAddRectangle(c[0][0],c[0][1],c[1][0],c[1][1],layer,color); break;
+    case 'poly':
+      if(c.length>=2) window.cadAddPolyline(c.map(p=>p.slice()),layer,color); break;
+    case 'spline':
+      if(c.length>=4) window.cadAddSpline(c.map(p=>p.slice()),layer,color); break;
+    case 'ellipse': {
+      // centre=c[0]; semi-major tip=c[1]; semi-minor tip=c[2]
+      const a   = dist(c[0],c[1]);
+      const b   = dist(c[0],c[2]);
+      const rot = Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
+      window.cadAddEllipse(c[0][0],c[0][1],a,b,rot,layer,color); break;
+    }
+    case 'text':
+      // text content was set via command bar into pendingText
+      if(!pendingText) {pendingText=null;return;}
+      window.cadAddText(c[0][0],c[0][1],pendingText,2.5,0,layer,color);
+      pendingText=null; break;
+    case 'dimlin': {
+      const off = dist([c[0][0],c[0][1]],[c[2][0],c[2][1]])*Math.sign(c[2][1]-c[0][1]);
+      window.cadAddLinearDim(c[0][0],c[0][1],c[1][0],c[1][1],off,layer,color); break;
+    }
+    case 'dimali': {
+      const off = dist([c[0][0],c[0][1]],[c[2][0],c[2][1]])*Math.sign(c[2][1]-c[0][1]);
+      window.cadAddAlignedDim(c[0][0],c[0][1],c[1][0],c[1][1],off,layer,color); break;
+    }
+    case 'dimang': {
+      const r2 = dist(c[0],c[3]);
+      window.cadAddAngularDim(c[0][0],c[0][1],c[1][0],c[1][1],c[2][0],c[2][1],r2,layer,color); break;
+    }
+    case 'dimrad': {
+      const ang = Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
+      const r   = dist(c[0],c[1]);
+      window.cadAddRadialDim(c[0][0],c[0][1],r,ang,layer,color); break;
+    }
+    case 'dimdia': {
+      const ang = Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
+      const r   = dist(c[0],c[1]);
+      window.cadAddDiameterDim(c[0][0],c[0][1],r,ang,layer,color); break;
+    }
+  }
+  clicks = [];
+  render();
+}
+
+let pendingText = null;
+
+function dist(a,b){return Math.hypot(b[0]-a[0],b[1]-a[1]);}
+
+// ─── Mouse events ─────────────────────────────────────────────────────────────
+canvas.addEventListener('mousedown', e=>{
+  if(e.button===1||(e.button===0&&e.altKey)){
+    isPanning=true;
+    panStart={x:e.clientX-panX,y:e.clientY-panY};
+    canvas.style.cursor='grabbing';
+    return;
+  }
+  if(e.button===2){
+    // Right-click: finish variable-length tools
+    if(currentTool==='poly'||currentTool==='spline') commitEntity();
+    return;
+  }
+  if(!wasmReady) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const [wx,wy] = s2w(e.clientX-rect.left, e.clientY-rect.top);
+
+  // If in text mode and no text yet, let command bar handle first
+  if(currentTool==='text' && clicks.length===0){
+    clicks.push([wx,wy]);
+    setStatus('Type your text in the command bar and press Enter.');
+    return;
+  }
+
+  clicks.push([wx,wy]);
+
+  const required = toolClicks[currentTool];
+  if(required > 0 && clicks.length >= required) {
+    commitEntity();
+  }
+  render();
+});
+
+canvas.addEventListener('dblclick', e=>{
+  if(currentTool==='poly'||currentTool==='spline'){
+    // Remove the duplicate click from the mousedown just before dblclick
+    if(clicks.length>0) clicks.pop();
+    commitEntity();
+  }
+});
+
+canvas.addEventListener('mousemove', e=>{
+  if(isPanning){
+    panX = e.clientX - panStart.x;
+    panY = e.clientY - panStart.y;
+    render(); return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const [wx,wy] = s2w(e.clientX-rect.left, e.clientY-rect.top);
+  tempPt = [wx,wy];
+  document.getElementById('coords').textContent =
+    `${wx.toFixed(2)}, ${wy.toFixed(2)}`;
+  if(clicks.length>0) render();
+});
+
+canvas.addEventListener('mouseup', e=>{
+  if(isPanning){isPanning=false;canvas.style.cursor='crosshair';}
+});
+
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const factor = e.deltaY<0 ? 1.15 : 1/1.15;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+  // Zoom towards cursor
+  panX = mx - factor*(mx-panX);
+  panY = my - factor*(my-panY);
+  zoom *= factor;
+  render();
+},{passive:false});
+
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+
+// ─── Command bar ──────────────────────────────────────────────────────────────
+const cmdInput = document.getElementById('cmd-input');
+cmdInput.addEventListener('keydown', e=>{
+  if(e.key!=='Enter') return;
+  const raw = cmdInput.value.trim();
+  cmdInput.value='';
+
+  // In text mode, the first Enter after clicking is the text content
+  if(currentTool==='text' && clicks.length===1 && pendingText===null){
+    pendingText = raw || 'Text';
+    commitEntity();
+    return;
+  }
+
+  const cmd = raw.toUpperCase();
+  const toolMap = {
+    LINE:'line',L:'line',
+    CIRCLE:'circle',C:'circle',
+    ARC:'arc',A:'arc',
+    RECT:'rect',RECTANGLE:'rect',R:'rect',
+    POLY:'poly',POLYLINE:'poly',P:'poly',
+    SPLINE:'spline',SP:'spline',S:'spline',
+    ELLIPSE:'ellipse',EL:'ellipse',E:'ellipse',
+    TEXT:'text',T:'text',
+    DIMLIN:'dimlin',
+    DIMALI:'dimali',
+    DIMANG:'dimang',
+    DIMRAD:'dimrad',
+    DIMDIA:'dimdia',
+    UNDO:'undo',U:'undo',
+    REDO:'redo',
+    DELETE:'delete',DEL:'delete',
+    CLEAR:'clear',
+    ZOOMFIT:'zoomfit',ZF:'zoomfit',
+    EXPORT:'export',DXF:'export',
+  };
+  const action = toolMap[cmd];
+  if(!action){setStatus(`Unknown command: ${raw}`);return;}
+  switch(action){
+    case 'undo':   if(wasmReady)window.cadUndo();render();break;
+    case 'redo':   if(wasmReady)window.cadRedo();render();break;
+    case 'delete': if(wasmReady&&selectedId)window.cadDeleteEntity(selectedId);selectedId=0;render();break;
+    case 'clear':  if(wasmReady)window.cadClear();render();break;
+    case 'zoomfit':zoomFit();break;
+    case 'export': exportDXF();break;
+    default: setTool(action);
+  }
+});
+
+// ─── Toolbar buttons ──────────────────────────────────────────────────────────
+['line','circle','arc','rect','poly','spline','ellipse','text',
+ 'dimlin','dimali','dimang','dimrad','dimdia'].forEach(t=>{
+  document.getElementById('tool-'+t).addEventListener('click',()=>setTool(t));
+});
+document.getElementById('btn-undo').addEventListener('click',()=>{if(wasmReady)window.cadUndo();render();});
+document.getElementById('btn-redo').addEventListener('click',()=>{if(wasmReady)window.cadRedo();render();});
+document.getElementById('btn-del').addEventListener('click',()=>{
+  if(wasmReady&&selectedId)window.cadDeleteEntity(selectedId);selectedId=0;render();
+});
+document.getElementById('btn-clear').addEventListener('click',()=>{if(wasmReady)window.cadClear();render();});
+document.getElementById('btn-export').addEventListener('click',exportDXF);
+document.getElementById('layer-sel').addEventListener('change',e=>currentLayer=+e.target.value);
+document.getElementById('color-inp').addEventListener('input',e=>currentColor=e.target.value);
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  if(document.activeElement===cmdInput) return;
+  if(e.ctrlKey||e.metaKey){
+    if(e.key==='z'){e.preventDefault();if(wasmReady)window.cadUndo();render();}
+    if(e.key==='y'||e.key==='Y'){e.preventDefault();if(wasmReady)window.cadRedo();render();}
+    return;
+  }
+  const map={l:'line',c:'circle',a:'arc',r:'rect',p:'poly',
+             s:'spline',e:'ellipse',t:'text'};
+  const k=e.key.toLowerCase();
+  if(map[k]){setTool(map[k]);return;}
+  if(e.key==='Delete'&&wasmReady&&selectedId){window.cadDeleteEntity(selectedId);selectedId=0;render();}
+  if(e.key==='Escape'){clicks=[];render();}
+  if(e.key==='Enter'&&(currentTool==='poly'||currentTool==='spline'))commitEntity();
+});
+
+// ─── Utility ─────────────────────────────────────────────────────────────────
+function setStatus(msg){document.getElementById('status').textContent=msg;}
+
+function zoomFit(){
+  if(!wasmReady) return;
+  const es = JSON.parse(window.cadEntities()||'[]');
+  if(!es.length){panX=0;panY=0;zoom=1;render();return;}
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  es.forEach(e=>{
+    const pts=entitySamplePoints(e);
+    pts.forEach(([x,y])=>{
+      if(x<minX)minX=x;if(y<minY)minY=y;
+      if(x>maxX)maxX=x;if(y>maxY)maxY=y;
+    });
+  });
+  if(!isFinite(minX)){panX=0;panY=0;zoom=1;render();return;}
+  const padX=(maxX-minX)*0.1+10, padY=(maxY-minY)*0.1+10;
+  minX-=padX;maxX+=padX;minY-=padY;maxY+=padY;
+  const scaleX=canvas.width/(maxX-minX);
+  const scaleY=canvas.height/(maxY-minY);
+  zoom=Math.min(scaleX,scaleY);
+  panX=canvas.width/2-((minX+maxX)/2)*zoom;
+  panY=canvas.height/2+((minY+maxY)/2)*zoom;
+  render();
+}
+
+function entitySamplePoints(e){
+  switch(e.type){
+    case 'line': return[[e.x1,e.y1],[e.x2,e.y2]];
+    case 'circle':case 'arc':
+      return[[e.cx+e.r,e.cy],[e.cx-e.r,e.cy],[e.cx,e.cy+e.r],[e.cx,e.cy-e.r]];
+    case 'rectangle': return[[e.x1,e.y1],[e.x2,e.y2]];
+    case 'polyline':case 'spline': return(e.points||[]);
+    case 'ellipse': return[[e.cx+e.r,e.cy],[e.cx-e.r,e.cy],[e.cx,e.cy+(e.r2||e.r)],[e.cx,e.cy-(e.r2||e.r)]];
+    case 'text': return[[e.x1,e.y1]];
+    default:
+      if(e.cx!=null) return[[e.cx,e.cy]];
+      return[[e.x1,e.y1],[e.x2,e.y2]];
+  }
+}
+
+function exportDXF(){
+  if(!wasmReady) return;
+  const dxf = window.cadExportDXF();
+  const blob = new Blob([dxf],{type:'text/plain'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download='drawing.dxf'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Renderer ─────────────────────────────────────────────────────────────────
+const ARROW = 8;   // arrowhead size in screen pixels
+const DIM_TICK = 5; // extension-line tick size
+
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Grid
+  drawGrid();
+
+  if(!wasmReady){
+    ctx.fillStyle='#666';ctx.font='14px sans-serif';ctx.textAlign='center';
+    ctx.fillText('Loading WASM…',canvas.width/2,canvas.height/2);
+    return;
+  }
+
+  const entities = JSON.parse(window.cadEntities()||'[]');
+  entities.forEach(e=>drawEntity(e, e.id===selectedId));
+
+  // Rubber-band preview
+  drawPreview();
+
+  // Crosshair at cursor
+  if(tempPt){
+    const [sx,sy]=w2s(tempPt[0],tempPt[1]);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.25)';
+    ctx.lineWidth=1;
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,canvas.height);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(canvas.width,sy);ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawGrid(){
+  const step = Math.max(10, Math.round(50/zoom)*10);
+  const [ox,oy]=w2s(0,0);
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,0.05)';
+  ctx.lineWidth=1;
+
+  // Vertical grid lines
+  const startX=Math.floor((-panX-canvas.width/2)/(zoom*step))*step;
+  for(let wx=startX;wx<startX+canvas.width/zoom+step;wx+=step){
+    const [sx]=w2s(wx,0);
+    ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,canvas.height);ctx.stroke();
+  }
+  // Horizontal grid lines
+  const startY=Math.floor((-panY-canvas.height/2)/(zoom*step))*step;
+  for(let wy=startY;wy<startY+canvas.height/zoom+step;wy+=step){
+    const [,sy]=w2s(0,wy);
+    ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(canvas.width,sy);ctx.stroke();
+  }
+  // Axes
+  ctx.strokeStyle='rgba(255,255,255,0.15)';
+  ctx.beginPath();ctx.moveTo(0,oy);ctx.lineTo(canvas.width,oy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(ox,0);ctx.lineTo(ox,canvas.height);ctx.stroke();
+  ctx.restore();
+}
+
+function entityColor(e, selected){
+  if(selected) return '#ff9800';
+  return e.color||'#ffffff';
+}
+
+function drawEntity(e, selected=false){
+  const col = entityColor(e,selected);
+  ctx.save();
+  ctx.strokeStyle=col;
+  ctx.fillStyle=col;
+  ctx.lineWidth=selected?2:1;
+
+  switch(e.type){
+    case 'line':{
+      const [x1,y1]=w2s(e.x1,e.y1),[x2,y2]=w2s(e.x2,e.y2);
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke(); break;
+    }
+    case 'circle':{
+      const [cx,cy]=w2s(e.cx,e.cy);
+      ctx.beginPath();ctx.arc(cx,cy,e.r*zoom,0,2*Math.PI);ctx.stroke(); break;
+    }
+    case 'arc':{
+      const [cx,cy]=w2s(e.cx,e.cy);
+      const a1=-e.startDeg*Math.PI/180, a2=-e.endDeg*Math.PI/180;
+      ctx.beginPath();ctx.arc(cx,cy,e.r*zoom,a1,a2,a1>a2);ctx.stroke(); break;
+    }
+    case 'rectangle':{
+      const [x1,y1]=w2s(e.x1,e.y1),[x2,y2]=w2s(e.x2,e.y2);
+      ctx.beginPath();ctx.rect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));ctx.stroke(); break;
+    }
+    case 'polyline':
+      drawPolylinePts(ctx,(e.points||[]).map(p=>w2s(p[0],p[1]))); break;
+
+    case 'spline':
+      drawSpline(ctx,(e.points||[]).map(p=>w2s(p[0],p[1]))); break;
+
+    case 'ellipse':{
+      const [cx,cy]=w2s(e.cx,e.cy);
+      const rot=-(e.rotDeg||0)*Math.PI/180;
+      ctx.beginPath();
+      ctx.ellipse(cx,cy,(e.r||1)*zoom,(e.r2||e.r||1)*zoom,rot,0,2*Math.PI);
+      ctx.stroke(); break;
+    }
+
+    case 'text':{
+      const [sx,sy]=w2s(e.x1,e.y1);
+      const h=Math.max(8,(e.textHeight||2.5)*zoom);
+      ctx.save();
+      ctx.translate(sx,sy);
+      ctx.rotate(-(e.rotDeg||0)*Math.PI/180);
+      ctx.font=`${h}px monospace`;
+      ctx.fillText(e.text||'',0,0);
+      ctx.restore(); break;
+    }
+
+    case 'dimlin':
+    case 'dimali':
+      drawLinearDim(ctx,e,col); break;
+
+    case 'dimang':
+      drawAngularDim(ctx,e,col); break;
+
+    case 'dimrad':
+      drawRadialDim(ctx,e,col,false); break;
+
+    case 'dimdia':
+      drawRadialDim(ctx,e,col,true); break;
+  }
+  ctx.restore();
+}
+
+// ── Vector drawing helpers ──────────────────────────────────────────────────
+function drawPolylinePts(ctx2, pts){
+  if(pts.length<2)return;
+  ctx2.beginPath();ctx2.moveTo(pts[0][0],pts[0][1]);
+  pts.slice(1).forEach(([x,y])=>ctx2.lineTo(x,y));
+  ctx2.stroke();
+}
+
+function drawSpline(ctx2, pts){
+  if(pts.length<4){
+    // Fewer than 4 control points → draw as polyline.
+    drawPolylinePts(ctx2,pts); return;
+  }
+  const nSegs=(pts.length-1)/3|0;
+  ctx2.beginPath();
+  ctx2.moveTo(pts[0][0],pts[0][1]);
+  for(let i=0;i<nSegs;i++){
+    const b=i*3;
+    ctx2.bezierCurveTo(
+      pts[b+1][0],pts[b+1][1],
+      pts[b+2][0],pts[b+2][1],
+      pts[b+3][0],pts[b+3][1]);
+  }
+  ctx2.stroke();
+}
+
+function screenArrow(ctx2, px,py, dx,dy){
+  const len=Math.hypot(dx,dy);
+  if(len<0.01)return;
+  const ux=dx/len,uy=dy/len;
+  const sz=ARROW;
+  ctx2.beginPath();
+  ctx2.moveTo(px,py);
+  ctx2.lineTo(px-ux*sz+uy*sz*0.4,py-uy*sz-ux*sz*0.4);
+  ctx2.lineTo(px-ux*sz-uy*sz*0.4,py-uy*sz+ux*sz*0.4);
+  ctx2.closePath();
+  ctx2.fill();
+}
+
+function drawLinearDim(ctx2,e,col){
+  // For dimlin we use horizontal logic based on X distance vs Y distance.
+  // The offset (e.cx) is the dim-line displacement from the measured segment midpoint.
+  const dx=e.x2-e.x1, dy=e.y2-e.y1;
+  const isHoriz=Math.abs(dx)>=Math.abs(dy);
+  const off=e.cx||30;
+  let d1x,d1y,d2x,d2y;
+  if(e.type==='dimali'){
+    // Aligned: perpendicular to segment direction
+    const len=Math.hypot(dx,dy)||1;
+    const ux=dx/len,uy=dy/len;
+    const px=-uy,py=ux;
+    d1x=e.x1+px*off; d1y=e.y1+py*off;
+    d2x=e.x2+px*off; d2y=e.y2+py*off;
+  } else {
+    // Linear: horizontal or vertical
+    if(isHoriz){
+      const dimY=(e.y1+e.y2)/2-off;
+      d1x=e.x1;d1y=dimY;d2x=e.x2;d2y=dimY;
+    } else {
+      const dimX=(e.x1+e.x2)/2-off;
+      d1x=dimX;d1y=e.y1;d2x=dimX;d2y=e.y2;
+    }
+  }
+  // Screen coords
+  const [sx1,sy1]=w2s(e.x1,e.y1),[sx2,sy2]=w2s(e.x2,e.y2);
+  const [sd1x,sd1y]=w2s(d1x,d1y),[sd2x,sd2y]=w2s(d2x,d2y);
+
+  ctx2.save();
+  ctx2.strokeStyle=col;ctx2.fillStyle=col;ctx2.lineWidth=1;
+  // Extension lines
+  ctx2.beginPath();ctx2.moveTo(sx1,sy1);ctx2.lineTo(sd1x,sd1y);ctx2.stroke();
+  ctx2.beginPath();ctx2.moveTo(sx2,sy2);ctx2.lineTo(sd2x,sd2y);ctx2.stroke();
+  // Dimension line
+  ctx2.beginPath();ctx2.moveTo(sd1x,sd1y);ctx2.lineTo(sd2x,sd2y);ctx2.stroke();
+  // Arrows
+  screenArrow(ctx2,sd1x,sd1y,sd2x-sd1x,sd2y-sd1y);
+  screenArrow(ctx2,sd2x,sd2y,sd1x-sd2x,sd1y-sd2y);
+  // Text
+  const mx=(sd1x+sd2x)/2,my=(sd1y+sd2y)/2;
+  const val=Math.hypot(e.x2-e.x1,e.y2-e.y1).toFixed(2);
+  ctx2.font='11px sans-serif';ctx2.textAlign='center';
+  ctx2.fillText(val,mx,my-4);
+  ctx2.restore();
+}
+
+function drawAngularDim(ctx2,e,col){
+  const ang1=Math.atan2(e.y1-e.cy,e.x1-e.cx);
+  const ang2=Math.atan2(e.y2-e.cy,e.x2-e.cx);
+  let span=ang2-ang1;if(span<0)span+=2*Math.PI;
+  const r=(e.r||30)*zoom;
+  const [csx,csy]=w2s(e.cx,e.cy);
+  ctx2.save();
+  ctx2.strokeStyle=col;ctx2.fillStyle=col;ctx2.lineWidth=1;
+  // Dim arc
+  ctx2.beginPath();
+  ctx2.arc(csx,csy,r,-ang1,-(ang1+span),span>Math.PI);
+  ctx2.stroke();
+  // Leader lines
+  ctx2.beginPath();
+  ctx2.moveTo(csx,csy);
+  ctx2.lineTo(csx+Math.cos(ang1)*r,csy-Math.sin(ang1)*r);
+  ctx2.stroke();
+  ctx2.beginPath();
+  ctx2.moveTo(csx,csy);
+  ctx2.lineTo(csx+Math.cos(ang2)*r,csy-Math.sin(ang2)*r);
+  ctx2.stroke();
+  // Text
+  const midAng=ang1+span/2;
+  const [tx,ty]=[csx+Math.cos(midAng)*r*1.3,csy-Math.sin(midAng)*r*1.3];
+  const deg=(span*180/Math.PI).toFixed(1);
+  ctx2.font='11px sans-serif';ctx2.textAlign='center';
+  ctx2.fillText(`${deg}°`,tx,ty);
+  ctx2.restore();
+}
+
+function drawRadialDim(ctx2,e,col,diameter){
+  const ang=(e.rotDeg||0)*Math.PI/180;
+  const [csx,csy]=w2s(e.cx,e.cy);
+  const rx=csx+Math.cos(ang)*e.r*zoom;
+  const ry=csy-Math.sin(ang)*e.r*zoom;
+  ctx2.save();
+  ctx2.strokeStyle=col;ctx2.fillStyle=col;ctx2.lineWidth=1;
+  if(diameter){
+    const rx2=csx-Math.cos(ang)*e.r*zoom;
+    const ry2=csy+Math.sin(ang)*e.r*zoom;
+    ctx2.beginPath();ctx2.moveTo(rx,ry);ctx2.lineTo(rx2,ry2);ctx2.stroke();
+    screenArrow(ctx2,rx,ry,rx-rx2,ry-ry2);
+    screenArrow(ctx2,rx2,ry2,rx2-rx,ry2-ry);
+    const [tx,ty]=[csx+Math.cos(ang)*e.r*zoom*1.4,csy-Math.sin(ang)*e.r*zoom*1.4];
+    ctx2.font='11px sans-serif';ctx2.textAlign='center';
+    ctx2.fillText(`⌀${(2*e.r).toFixed(2)}`,tx,ty);
+  } else {
+    ctx2.beginPath();ctx2.moveTo(csx,csy);ctx2.lineTo(rx,ry);ctx2.stroke();
+    screenArrow(ctx2,rx,ry,rx-csx,ry-csy);
+    const [tx,ty]=[csx+Math.cos(ang)*e.r*zoom*1.4,csy-Math.sin(ang)*e.r*zoom*1.4];
+    ctx2.font='11px sans-serif';ctx2.textAlign='center';
+    ctx2.fillText(`R${e.r.toFixed(2)}`,tx,ty);
+  }
+  ctx2.restore();
+}
+
+// ── Rubber-band preview ──────────────────────────────────────────────────────
+function drawPreview(){
+  if(!tempPt||clicks.length===0) return;
+  const col='rgba(0,120,212,0.7)';
+  ctx.save();
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1;
+  ctx.setLineDash([4,4]);
+
+  const pt=w2s(tempPt[0],tempPt[1]);
+  const c0=clicks.length>0?w2s(clicks[0][0],clicks[0][1]):null;
+  const c1=clicks.length>1?w2s(clicks[1][0],clicks[1][1]):null;
+  const c2=clicks.length>2?w2s(clicks[2][0],clicks[2][1]):null;
+
+  switch(currentTool){
+    case 'line':
+      if(c0){ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();}
+      break;
+    case 'circle':
+      if(c0){
+        const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
+        ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();
+      } break;
+    case 'arc':
+      if(c0&&!c1){
+        const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
+        ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();
+      } else if(c0&&c1){
+        const r=Math.hypot(c1[0]-c0[0],c1[1]-c0[1]);
+        const a1=Math.atan2(c1[1]-c0[1],c1[0]-c0[0]);
+        const a2=Math.atan2(pt[1]-c0[1],pt[0]-c0[0]);
+        ctx.beginPath();ctx.arc(c0[0],c0[1],r,a1,a2);ctx.stroke();
+      } break;
+    case 'rect':
+      if(c0){
+        ctx.beginPath();ctx.rect(Math.min(c0[0],pt[0]),Math.min(c0[1],pt[1]),
+          Math.abs(pt[0]-c0[0]),Math.abs(pt[1]-c0[1]));ctx.stroke();
+      } break;
+    case 'poly':case 'spline':{
+      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
+      if(currentTool==='spline'&&all.length>=4) drawSpline(ctx,all);
+      else drawPolylinePts(ctx,all);
+      break;
+    }
+    case 'ellipse':
+      if(c0&&!c1){
+        const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
+        ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();
+      } else if(c0&&c1){
+        const a=Math.hypot(c1[0]-c0[0],c1[1]-c0[1]);
+        const b=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
+        const rot=Math.atan2(c1[1]-c0[1],c1[0]-c0[0]);
+        ctx.beginPath();ctx.ellipse(c0[0],c0[1],a,b,rot,0,2*Math.PI);ctx.stroke();
+      } break;
+    case 'dimlin':case 'dimali':
+      if(c0){ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();}
+      break;
+    case 'dimang':
+      if(c0){
+        ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();
+      } break;
+    case 'dimrad':case 'dimdia':
+      if(c0){
+        const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
+        ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();
+      } break;
+  }
+  // Draw click markers
+  clicks.forEach(([wx,wy])=>{
+    const [sx,sy]=w2s(wx,wy);
+    ctx.beginPath();ctx.arc(sx,sy,3,0,2*Math.PI);ctx.fill();
+  });
+  ctx.restore();
+}
+
+// ─── Initialise ───────────────────────────────────────────────────────────────
+// Load wasm_exec.js from Go installation, then the WASM binary.
+(async()=>{
+  resize();
+  // Try to load wasm_exec.js (ships with Go SDK; must be served alongside index.html)
+  try {
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='wasm_exec.js';
+      s.onload=res;
+      s.onerror=rej;
+      document.head.appendChild(s);
+    });
+    await loadWASM();
+  } catch(err) {
+    installDemoStubs();
+    setStatus('Demo mode (WASM not loaded — serve wasm_exec.js + main.wasm to enable full mode)');
+  }
+  render();
+  setTool('line');
+})();
+</script>
+</body>
+</html>

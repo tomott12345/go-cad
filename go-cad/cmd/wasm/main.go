@@ -16,7 +16,8 @@ import (
 var doc = document.New()
 
 func main() {
-	// ── Entity creation ──────────────────────────────────────────────────
+	// ── Primitive entity creation ─────────────────────────────────────────
+
 	js.Global().Set("cadAddLine", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) < 6 {
 			return -1
@@ -62,6 +63,120 @@ func main() {
 			pts[i] = []float64{pt.Index(0).Float(), pt.Index(1).Float()}
 		}
 		return doc.AddPolyline(pts, a[1].Int(), a[2].String())
+	}))
+
+	// ── Advanced entity creation (Task #3) ────────────────────────────────
+
+	// cadAddSpline(points_array, layer, color) → entity ID
+	// points_array: JS array of [x,y] pairs (min 4 for a single cubic segment)
+	// Layout: [p0, ctrl1, ctrl2, p1, ctrl3, ctrl4, p2, ...] — standard cubic chain.
+	// Keyboard shortcut: S  /  Command: SPLINE
+	js.Global().Set("cadAddSpline", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 3 {
+			return -1
+		}
+		jsArr := a[0]
+		n := jsArr.Length()
+		pts := make([][]float64, n)
+		for i := 0; i < n; i++ {
+			pt := jsArr.Index(i)
+			pts[i] = []float64{pt.Index(0).Float(), pt.Index(1).Float()}
+		}
+		return doc.AddSpline(pts, a[1].Int(), a[2].String())
+	}))
+
+	// cadAddEllipse(cx, cy, a, b, rotDeg, layer, color) → entity ID
+	// a: semi-major axis; b: semi-minor axis; rotDeg: rotation CCW from +X
+	// Keyboard shortcut: E  /  Command: ELLIPSE
+	js.Global().Set("cadAddEllipse", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 7 {
+			return -1
+		}
+		return doc.AddEllipse(
+			a[0].Float(), a[1].Float(), // cx, cy
+			a[2].Float(), a[3].Float(), // semi-major, semi-minor
+			a[4].Float(),               // rotation degrees
+			a[5].Int(), a[6].String())  // layer, color
+	}))
+
+	// cadAddText(x, y, text, height, rotDeg, layer, color) → entity ID
+	// Keyboard shortcut: T  /  Command: TEXT
+	js.Global().Set("cadAddText", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 7 {
+			return -1
+		}
+		return doc.AddText(
+			a[0].Float(), a[1].Float(), // x, y
+			a[2].String(),              // text content
+			a[3].Float(), a[4].Float(), // height, rotation
+			a[5].Int(), a[6].String())  // layer, color
+	}))
+
+	// cadAddLinearDim(x1,y1,x2,y2,offset,layer,color) → entity ID
+	// offset: perpendicular distance from measurement line to dim line.
+	// Command: DIMLIN
+	js.Global().Set("cadAddLinearDim", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 7 {
+			return -1
+		}
+		return doc.AddLinearDim(
+			a[0].Float(), a[1].Float(),
+			a[2].Float(), a[3].Float(),
+			a[4].Float(),
+			a[5].Int(), a[6].String())
+	}))
+
+	// cadAddAlignedDim(x1,y1,x2,y2,offset,layer,color) → entity ID
+	// Command: DIMALI
+	js.Global().Set("cadAddAlignedDim", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 7 {
+			return -1
+		}
+		return doc.AddAlignedDim(
+			a[0].Float(), a[1].Float(),
+			a[2].Float(), a[3].Float(),
+			a[4].Float(),
+			a[5].Int(), a[6].String())
+	}))
+
+	// cadAddAngularDim(cx,cy,x1,y1,x2,y2,radius,layer,color) → entity ID
+	// cx,cy: vertex; x1,y1 and x2,y2: points on the two rays.
+	// Command: DIMANG
+	js.Global().Set("cadAddAngularDim", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 9 {
+			return -1
+		}
+		return doc.AddAngularDim(
+			a[0].Float(), a[1].Float(), // cx, cy
+			a[2].Float(), a[3].Float(), // x1, y1
+			a[4].Float(), a[5].Float(), // x2, y2
+			a[6].Float(),               // arc radius
+			a[7].Int(), a[8].String())
+	}))
+
+	// cadAddRadialDim(cx,cy,r,angle,layer,color) → entity ID
+	// angle: leader line angle in degrees from +X.
+	// Command: DIMRAD
+	js.Global().Set("cadAddRadialDim", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 6 {
+			return -1
+		}
+		return doc.AddRadialDim(
+			a[0].Float(), a[1].Float(), // cx, cy
+			a[2].Float(), a[3].Float(), // radius, angle
+			a[4].Int(), a[5].String())
+	}))
+
+	// cadAddDiameterDim(cx,cy,r,angle,layer,color) → entity ID
+	// Command: DIMDIA
+	js.Global().Set("cadAddDiameterDim", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) < 6 {
+			return -1
+		}
+		return doc.AddDiameterDim(
+			a[0].Float(), a[1].Float(), // cx, cy
+			a[2].Float(), a[3].Float(), // radius, angle
+			a[4].Int(), a[5].String())
 	}))
 
 	// ── Deletion ─────────────────────────────────────────────────────────
