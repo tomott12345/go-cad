@@ -404,8 +404,10 @@ func main() {
                                 continue
                         }
                         mask := cfg.mask
+                        // mask==0 means all modes disabled — respect it exactly.
                         if mask == 0 {
-                                mask = snap.SnapAll
+                                fmt.Println("all snap modes are disabled (use SNAPMODE … true or set mask > 0)")
+                                continue
                         }
                         result := snap.FindSnap(coords[0], coords[1], doc.Entities(), coords[2], mask)
                         if result == nil {

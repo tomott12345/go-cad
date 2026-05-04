@@ -477,8 +477,10 @@ func main() {
                         return ""
                 }
                 mask := snap.SnapType(a[3].Int())
+                // mask==0 means "no modes enabled" — caller must pass SnapAll (255) explicitly.
+                // The global on/off is handled in JS (snapEnabled flag); here we respect the mask exactly.
                 if mask == 0 {
-                        mask = snap.SnapAll
+                        return "" // nothing to snap to
                 }
                 result := snap.FindSnap(a[0].Float(), a[1].Float(), doc.Entities(), a[2].Float(), mask)
                 if result == nil {

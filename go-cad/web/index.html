@@ -305,6 +305,36 @@ let currentColor = '#00ff00';
 let pendingText  = null;  // set by command bar for text/mtext tools
 let editPickIds  = [];    // multi-entity pick buffer for edit ops (trim/extend/fillet/chamfer/mirror)
 
+// ─── Locked-layer guard (Task #5) ────────────────────────────────────────────
+// Returns true if the entity's layer is locked (selection/edit/delete blocked).
+function isOnLockedLayer(entityId){
+  if(!wasmReady||!window._lockedLayers) return false;
+  const entities=JSON.parse(window.cadEntities()||'[]');
+  const e=entities.find(e=>e.id===entityId);
+  if(!e) return false;
+  return window._lockedLayers.has(e.layer||0);
+}
+
+// Wrap selection so picking an entity on a locked layer shows a warning instead.
+function trySelect(id){
+  if(!id) return 0;
+  if(isOnLockedLayer(id)){
+    setStatus(`Layer locked — cannot select entity ${id}.`);
+    return 0;
+  }
+  return id;
+}
+
+// Wrap deletion so locked-layer entities cannot be deleted.
+function tryDelete(id){
+  if(!id||!wasmReady) return;
+  if(isOnLockedLayer(id)){
+    setStatus(`Layer locked — cannot delete entity ${id}.`);
+    return;
+  }
+  window.cadDeleteEntity(id);
+}
+
 // ─── Snap state (Task #5) ─────────────────────────────────────────────────────
 let snapEnabled = true;
 let snapResult  = null;  // current SnapCandidate {x,y,type,entityID} or null
@@ -375,8 +405,9 @@ function updateSnapBtn(){
 
 function snapWorldPt(wx, wy){
   if(!snapEnabled||!wasmReady) return [wx,wy];
+  const mask = snapMask(); // 0 means all modes disabled → no snap
+  if(mask===0){ snapResult=null; return [wx,wy]; }
   const worldRadius = SNAP_RADIUS_PX / zoom;
-  const mask = snapMask();
   const raw = window.cadFindSnap(wx, wy, worldRadius, mask);
   if(!raw) { snapResult=null; return [wx,wy]; }
   snapResult = JSON.parse(raw);
@@ -917,7 +948,7 @@ cmdInput.addEventListener('keydown', e=>{
   switch(action){
     case 'undo':    if(wasmReady)window.cadUndo();render();break;
     case 'redo':    if(wasmReady)window.cadRedo();render();break;
-    case 'delete':  if(wasmReady&&selectedId)window.cadDeleteEntity(selectedId);selectedId=0;render();break;
+    case 'delete':  if(wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}break;
     case 'clear':   if(wasmReady)window.cadClear();render();break;
     case 'zoomfit': zoomFit();break;
     case 'export':  exportDXF();break;
@@ -935,7 +966,7 @@ cmdInput.addEventListener('keydown', e=>{
 document.getElementById('btn-undo').addEventListener('click',()=>{if(wasmReady)window.cadUndo();render();});
 document.getElementById('btn-redo').addEventListener('click',()=>{if(wasmReady)window.cadRedo();render();});
 document.getElementById('btn-del').addEventListener('click',()=>{
-  if(wasmReady&&selectedId)window.cadDeleteEntity(selectedId);selectedId=0;render();
+  if(wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}
 });
 document.getElementById('btn-clear').addEventListener('click',()=>{if(wasmReady)window.cadClear();render();});
 document.getElementById('btn-zoomfit').addEventListener('click',zoomFit);
@@ -1001,7 +1032,7 @@ document.addEventListener('keydown', e=>{
   const map={l:'line',c:'circle',a:'arc',r:'rect',p:'poly',
              s:'spline',n:'nurbs',e:'ellipse',t:'text'};
   if(map[e.key.toLowerCase()]){setTool(map[e.key.toLowerCase()]);return;}
-  if(e.key==='Delete'&&wasmReady&&selectedId){window.cadDeleteEntity(selectedId);selectedId=0;render();}
+  if(e.key==='Delete'&&wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}
   if(e.key==='Escape'){clicks=[];snapResult=null;drawSnapMarker();render();}
   if(e.key==='Enter'&&['poly','spline','nurbs'].includes(currentTool)) commitEntity();
 });
@@ -1095,11 +1126,13 @@ function render(){
   // Build layer cache (id→layer) for BYLAYER color+linetype resolution (Task #5)
   const hiddenLayers = new Set();
   window._layerCache = {};
+  window._lockedLayers = new Set();
   try {
     const layers=JSON.parse(window.cadGetLayers()||'[]');
     layers.forEach(l=>{
       window._layerCache[l.id]=l;
       if(!l.visible||l.frozen) hiddenLayers.add(l.id);
+      if(l.locked) window._lockedLayers.add(l.id);
     });
   } catch(_){}
 
