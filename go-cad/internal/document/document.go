@@ -68,6 +68,10 @@ type Entity struct {
         NURBSDegree int       `json:"nurbsDeg,omitempty"` // B-spline degree (typically 3)
         Knots       []float64 `json:"knots,omitempty"`    // knot vector (len = nControls + nurbsDeg + 1)
         Weights     []float64 `json:"weights,omitempty"`  // rational weights (len = nControls; nil ↦ all 1)
+
+        // Per-entity override fields (Task #8)
+        LineType   string  `json:"lineType,omitempty"`   // entity-level linetype override ("" = use layer)
+        LineWeight float64 `json:"lineWeight,omitempty"` // entity-level lineweight override (0 = use layer)
 }
 
 // Length returns the geometric length / circumference of the entity.
@@ -634,6 +638,13 @@ func (d *Document) SetEntityProp(id int, field, value string) bool {
                         var f float64
                         if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
                                 e.EndDeg = f
+                        }
+                case "lineType":
+                        e.LineType = value
+                case "lineWeight":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.LineWeight = f
                         }
                 default:
                         return false

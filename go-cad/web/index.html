@@ -230,14 +230,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 <body>
 
 <!-- ── Welcome Overlay ───────────────────────────────────────────────────────── -->
-<div id="welcome-overlay">
+<div id="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
   <div id="welcome-box">
-    <h1>go-cad</h1>
+    <h1 id="welcome-title">go-cad</h1>
     <p class="subtitle">Open-source browser CAD — zero dependencies, WASM-powered</p>
     <div class="btn-group">
-      <button id="btn-welcome-new">New Drawing</button>
-      <button id="btn-welcome-open">Open DXF…</button>
-      <button id="btn-welcome-close">Skip</button>
+      <button id="btn-welcome-new" aria-label="Start a new empty drawing">New Drawing</button>
+      <button id="btn-welcome-open" aria-label="Open a DXF file from disk">Open DXF…</button>
+      <button id="btn-welcome-close" aria-label="Skip and go to canvas">Skip</button>
     </div>
     <div class="shortcuts">
       <h3>Quick Start</h3>
@@ -250,6 +250,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
         <dt>Middle drag / Ctrl+drag</dt><dd>Pan canvas</dd>
         <dt>Scroll wheel</dt><dd>Zoom in / out</dd>
       </dl>
+    </div>
+    <div style="margin-top:16px;border-top:1px solid #333;padding-top:12px;text-align:left">
+      <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Recent Files</div>
+      <div id="welcome-recent-list"></div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <a href="https://github.com/your-org/go-cad" target="_blank" rel="noopener"
+         style="font-size:11px;color:#4488ff;text-decoration:none" aria-label="go-cad documentation and source code on GitHub">
+        Documentation &amp; Source ↗
+      </a>
     </div>
   </div>
 </div>
@@ -476,7 +486,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 
 <!-- ── Layer Manager Modal ─────────────────────────────────────────────────────── -->
-<div id="layer-modal" class="modal-overlay">
+<div id="layer-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Layer Manager">
   <div class="modal-box">
     <h3>Layer Manager
       <button id="btn-add-layer">+ New Layer</button>
@@ -501,7 +511,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 
 <!-- ── Block Manager Modal ─────────────────────────────────────────────────────── -->
-<div id="block-modal" class="modal-overlay">
+<div id="block-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Block Manager">
   <div class="modal-box">
     <h3>Block Manager
       <button id="btn-close-blocks">✕</button>
@@ -514,7 +524,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 
 <!-- ── Symbols Modal ──────────────────────────────────────────────────────────── -->
-<div id="sym-modal" class="modal-overlay">
+<div id="sym-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Insert Symbol">
   <div class="modal-box">
     <h3>Insert Symbol</h3>
     <div id="sym-list"></div>
@@ -525,28 +535,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 
 <!-- ── Drafting Settings Dialog ───────────────────────────────────────────────── -->
-<div id="drafting-modal" class="modal-overlay">
+<div id="drafting-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="drafting-title">
   <div class="modal-box">
-    <h3>Drafting Settings
-      <button id="btn-close-drafting">✕</button>
+    <h3 id="drafting-title">Drafting Settings
+      <button id="btn-close-drafting-x" aria-label="Close drafting settings">✕</button>
     </h3>
     <div class="ds-form">
       <div class="ds-section">Grid</div>
       <div class="ds-row">
-        <label>Grid X spacing</label>
+        <label for="ds-grid-x">Grid X spacing</label>
         <input type="number" id="ds-grid-x" value="10" min="0.1" step="0.1">
       </div>
       <div class="ds-row">
-        <label>Grid Y spacing</label>
+        <label for="ds-grid-y">Grid Y spacing</label>
         <input type="number" id="ds-grid-y" value="10" min="0.1" step="0.1">
       </div>
       <div class="ds-row">
-        <label>Show Grid</label>
+        <label for="ds-grid-on">Show Grid</label>
         <input type="checkbox" id="ds-grid-on" checked>
       </div>
-      <div class="ds-section">Units</div>
+      <div class="ds-section">Units &amp; Precision</div>
       <div class="ds-row">
-        <label>Units</label>
+        <label for="ds-unit-sel">Units</label>
         <select id="ds-unit-sel">
           <option value="mm">Millimetres (mm)</option>
           <option value="cm">Centimetres (cm)</option>
@@ -556,13 +566,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
         </select>
       </div>
       <div class="ds-row">
-        <label>Precision (decimal places)</label>
+        <label for="ds-precision">Precision (decimal places)</label>
         <input type="number" id="ds-precision" value="4" min="0" max="8" step="1">
       </div>
       <div class="ds-section">Entity Defaults</div>
       <div class="ds-row">
-        <label>Default Color</label>
+        <label for="ds-def-color">Default Color</label>
         <input type="color" id="ds-def-color" value="#00ff00">
+      </div>
+      <div class="ds-row">
+        <label for="ds-def-linetype">Default Linetype</label>
+        <select id="ds-def-linetype">
+          <option value="Solid">Solid</option>
+          <option value="Dashed">Dashed</option>
+          <option value="Dotted">Dotted</option>
+          <option value="DashDot">DashDot</option>
+          <option value="Center">Center</option>
+          <option value="Hidden">Hidden</option>
+        </select>
+      </div>
+      <div class="ds-row">
+        <label for="ds-def-lw">Default Lineweight (mm)</label>
+        <input type="number" id="ds-def-lw" value="0.25" min="0.05" max="2" step="0.05">
       </div>
     </div>
     <div class="modal-footer">
@@ -573,37 +598,45 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 
 <!-- ── Print / Plot Dialog ────────────────────────────────────────────────────── -->
-<div id="print-modal" class="modal-overlay">
+<div id="print-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="print-title">
   <div class="modal-box">
-    <h3>Print / Plot
-      <button id="btn-close-print">✕</button>
+    <h3 id="print-title">Print / Plot
+      <button id="btn-close-print-x" aria-label="Close print dialog">✕</button>
     </h3>
     <div class="print-form">
       <div class="print-row">
-        <label>Output format</label>
+        <label for="print-fmt">Output format</label>
         <select id="print-fmt">
           <option value="pdf">PDF (browser print)</option>
           <option value="png">PNG (canvas snapshot)</option>
+          <option value="svg">SVG (vector export)</option>
         </select>
       </div>
       <div class="print-row">
-        <label>Paper size</label>
+        <label for="print-area">Plot area</label>
+        <select id="print-area">
+          <option value="all">All entities (extents)</option>
+          <option value="view">Current view</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-paper">Paper size</label>
         <select id="print-paper">
-          <option>A4 (210×297mm)</option>
-          <option>A3 (297×420mm)</option>
-          <option>Letter (8.5×11in)</option>
-          <option>Tabloid (11×17in)</option>
+          <option value="a4">A4 (210×297mm)</option>
+          <option value="a3">A3 (297×420mm)</option>
+          <option value="letter">Letter (8.5×11in)</option>
+          <option value="tabloid">Tabloid (11×17in)</option>
         </select>
       </div>
       <div class="print-row">
-        <label>Orientation</label>
+        <label for="print-orient">Orientation</label>
         <select id="print-orient">
-          <option>Landscape</option>
-          <option>Portrait</option>
+          <option value="landscape">Landscape</option>
+          <option value="portrait">Portrait</option>
         </select>
       </div>
       <div class="print-row">
-        <label>Scale</label>
+        <label for="print-scale">Scale</label>
         <select id="print-scale">
           <option value="fit">Fit to page</option>
           <option value="1:1">1:1</option>
@@ -612,6 +645,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
           <option value="1:10">1:10</option>
           <option value="1:50">1:50</option>
           <option value="1:100">1:100</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-margins">Margins (mm)</label>
+        <input type="number" id="print-margins" value="10" min="0" max="50" step="1" style="flex:1;background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:12px;padding:3px 6px" title="Uniform margin on all sides">
+      </div>
+      <div class="print-row" id="print-dpi-row">
+        <label for="print-dpi">DPI (PNG only)</label>
+        <select id="print-dpi">
+          <option value="96">96 dpi (screen)</option>
+          <option value="150">150 dpi</option>
+          <option value="300" selected>300 dpi (print)</option>
+          <option value="600">600 dpi (high)</option>
         </select>
       </div>
     </div>

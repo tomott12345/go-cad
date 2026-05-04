@@ -25,10 +25,10 @@ export function showEntityProperties(entity) {
 
   // Wire editable fields
   el.querySelectorAll('.insp-field[data-field]').forEach(input => {
-    input.addEventListener('change', () => {
+    const eventType = (input.tagName === 'SELECT') ? 'change' : 'change';
+    input.addEventListener(eventType, () => {
       const field = input.dataset.field;
-      let val = input.value;
-      if (input.type === 'color') val = input.value;
+      const val = input.value;
       if (!state.wasmReady) return;
       if (window.cadSetEntityProp) {
         const ok = window.cadSetEntityProp(entity.id, field, val);
@@ -72,6 +72,15 @@ function num(v, dec = 4) {
   return typeof v === 'number' ? v.toFixed(dec) : '—';
 }
 
+function propSelect(label, value, field, options) {
+  const opts = options.map(o =>
+    `<option value="${escH(o)}"${o===value?' selected':''}>${escH(o)}</option>`).join('');
+  return `<div class="insp-row">
+    <span class="insp-label">${escH(label)}</span>
+    <select class="insp-field" data-field="${escH(field)}" style="flex:1;background:var(--input-bg);border:1px solid #444;border-radius:2px;color:var(--text);font-size:11px;padding:1px 3px">${opts}</select>
+  </div>`;
+}
+
 function buildPropertyRows(e) {
   const rows = [];
   // Common props — always editable
@@ -79,6 +88,11 @@ function buildPropertyRows(e) {
   // Color: always show as editable colour picker; default to #ffffff if not a hex value
   const colorHex = (e.color && /^#[0-9a-fA-F]{6}$/.test(e.color)) ? e.color : '#ffffff';
   rows.push(prop('Color', colorHex, 'color', 'color'));
+  // Linetype
+  rows.push(propSelect('Linetype', e.lineType || 'Solid', 'lineType',
+    ['Solid','Dashed','Dotted','DashDot','Center','Hidden']));
+  // Lineweight
+  rows.push(prop('Lineweight', (e.lineWeight ?? 0.25).toFixed(2), 'lineWeight', 'number'));
 
   switch (e.type) {
     case 'line':

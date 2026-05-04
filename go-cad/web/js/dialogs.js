@@ -4,8 +4,48 @@ import { render, zoomFit, w2s } from './canvas.js';
 import { setTool } from './tools.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
-function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function openModal(id)  {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('open');
+  trapFocus(el);
+}
+function closeModal(id) {
+  document.getElementById(id)?.classList.remove('open');
+}
+
+// ── Focus trap ─────────────────────────────────────────────────────────────────
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+function trapFocus(modal) {
+  // Focus the first focusable element
+  const focusable = Array.from(modal.querySelectorAll(FOCUSABLE));
+  if (focusable.length) focusable[0].focus();
+
+  function onKeyDown(e) {
+    if (!modal.classList.contains('open')) {
+      document.removeEventListener('keydown', onKeyDown, true);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      modal.classList.remove('open');
+      document.removeEventListener('keydown', onKeyDown, true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusableNow = Array.from(modal.querySelectorAll(FOCUSABLE));
+    if (!focusableNow.length) return;
+    const first = focusableNow[0];
+    const last  = focusableNow[focusableNow.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+    }
+  }
+  document.addEventListener('keydown', onKeyDown, true);
+}
 
 // ── Layer Manager ──────────────────────────────────────────────────────────────
 export function openLayerManager() {
@@ -34,21 +74,21 @@ export function refreshLayerTable() {
 
   tbody.innerHTML = layers.map(l => `
     <tr>
-      <td><input type="radio" name="cur-layer" ${l.id===state.currentLayer?'checked':''} data-lid="${l.id}" class="layer-check layer-cur"></td>
-      <td><input type="text" value="${escH(l.name)}" data-lid="${l.id}" class="layer-name-inp"></td>
-      <td><input type="color" value="${l.color||'#ffffff'}" data-lid="${l.id}" class="layer-color-inp"></td>
+      <td><input type="radio" name="cur-layer" ${l.id===state.currentLayer?'checked':''} data-lid="${l.id}" class="layer-check layer-cur" aria-label="Set as current layer"></td>
+      <td><input type="text" value="${escH(l.name)}" data-lid="${l.id}" class="layer-name-inp" aria-label="Layer name"></td>
+      <td><input type="color" value="${l.color||'#ffffff'}" data-lid="${l.id}" class="layer-color-inp" aria-label="Layer colour"></td>
       <td>
-        <select data-lid="${l.id}" class="layer-lt-sel">
+        <select data-lid="${l.id}" class="layer-lt-sel" aria-label="Linetype">
           ${['Solid','Dashed','Dotted','DashDot','Center','Hidden'].map(lt =>
             `<option ${l.lineType===lt?'selected':''}>${lt}</option>`).join('')}
         </select>
       </td>
-      <td><input type="number" value="${(l.lineWeight||0.25).toFixed(2)}" step="0.05" min="0.05" max="2" data-lid="${l.id}" class="layer-lw-inp" style="width:50px"></td>
-      <td><input type="checkbox" ${l.visible?'checked':''} data-lid="${l.id}" class="layer-check layer-vis"></td>
-      <td><input type="checkbox" ${l.locked?'checked':''} data-lid="${l.id}" class="layer-check layer-lck"></td>
-      <td><input type="checkbox" ${l.frozen?'checked':''} data-lid="${l.id}" class="layer-check layer-frz"></td>
-      <td><input type="checkbox" ${l.print!==false?'checked':''} data-lid="${l.id}" class="layer-check layer-prt"></td>
-      <td><button class="layer-btn layer-del" data-lid="${l.id}" ${l.id===0?'disabled':''}>Del</button></td>
+      <td><input type="number" value="${(l.lineWeight||0.25).toFixed(2)}" step="0.05" min="0.05" max="2" data-lid="${l.id}" class="layer-lw-inp" style="width:50px" aria-label="Lineweight"></td>
+      <td><input type="checkbox" ${l.visible?'checked':''} data-lid="${l.id}" class="layer-check layer-vis" aria-label="Visible"></td>
+      <td><input type="checkbox" ${l.locked?'checked':''} data-lid="${l.id}" class="layer-check layer-lck" aria-label="Locked"></td>
+      <td><input type="checkbox" ${l.frozen?'checked':''} data-lid="${l.id}" class="layer-check layer-frz" aria-label="Frozen"></td>
+      <td><input type="checkbox" ${l.print!==false?'checked':''} data-lid="${l.id}" class="layer-check layer-prt" aria-label="Print"></td>
+      <td><button class="layer-btn layer-del" data-lid="${l.id}" ${l.id===0?'disabled':''} aria-label="Delete layer">Del</button></td>
     </tr>`).join('');
 
   // Wire events
@@ -135,7 +175,6 @@ export function openBlockManager() {
 export function closeBlockManager() { closeModal('block-modal'); }
 
 export function drawBlockPreview(canvas, blockName) {
-  const { getBlockEntities: gbe } = state;
   const ents = (() => {
     if (!state.wasmReady || !window.cadGetBlockEntities) return [];
     try { return JSON.parse(window.cadGetBlockEntities(blockName) || '[]'); } catch (_) { return []; }
@@ -248,13 +287,17 @@ function promptInsertSymbol(name) {
 export function openDraftingSettings() {
   const modal = document.getElementById('drafting-modal');
   if (!modal) return;
-  // Populate fields from localStorage
-  document.getElementById('ds-grid-x').value   = localStorage.getItem('grid-x') || '10';
-  document.getElementById('ds-grid-y').value   = localStorage.getItem('grid-y') || '10';
-  document.getElementById('ds-grid-on').checked = localStorage.getItem('grid-on') !== 'false';
-  document.getElementById('ds-unit-sel').value  = localStorage.getItem('cad-units') || 'mm';
-  document.getElementById('ds-precision').value = localStorage.getItem('cad-precision') || '4';
-  document.getElementById('ds-def-color').value = state.currentColor || '#00ff00';
+  // Populate fields from localStorage / state
+  document.getElementById('ds-grid-x').value    = localStorage.getItem('grid-x') || '10';
+  document.getElementById('ds-grid-y').value    = localStorage.getItem('grid-y') || '10';
+  document.getElementById('ds-grid-on').checked  = localStorage.getItem('grid-on') !== 'false';
+  document.getElementById('ds-unit-sel').value   = localStorage.getItem('cad-units') || 'mm';
+  document.getElementById('ds-precision').value  = localStorage.getItem('cad-precision') || '4';
+  document.getElementById('ds-def-color').value  = state.currentColor || '#00ff00';
+  const ltEl = document.getElementById('ds-def-linetype');
+  if (ltEl) ltEl.value = localStorage.getItem('cad-def-linetype') || 'Solid';
+  const lwEl = document.getElementById('ds-def-lw');
+  if (lwEl) lwEl.value = localStorage.getItem('cad-def-lw') || '0.25';
   openModal('drafting-modal');
 }
 export function closeDraftingSettings() { closeModal('drafting-modal'); }
@@ -266,11 +309,15 @@ export function applyDraftingSettings() {
   const uni = document.getElementById('ds-unit-sel')?.value;
   const prec= document.getElementById('ds-precision')?.value;
   const col = document.getElementById('ds-def-color')?.value;
+  const lt  = document.getElementById('ds-def-linetype')?.value;
+  const lw  = document.getElementById('ds-def-lw')?.value;
   if (gx)  localStorage.setItem('grid-x', gx);
   if (gy)  localStorage.setItem('grid-y', gy);
   if (gon !== undefined) localStorage.setItem('grid-on', String(gon));
   if (uni) localStorage.setItem('cad-units', uni);
   if (prec) localStorage.setItem('cad-precision', prec);
+  if (lt)  localStorage.setItem('cad-def-linetype', lt);
+  if (lw)  localStorage.setItem('cad-def-lw', lw);
   if (col) {
     state.currentColor = col;
     const inp = document.getElementById('color-inp');
@@ -282,23 +329,65 @@ export function applyDraftingSettings() {
 }
 
 // ── Print / Plot Dialog ────────────────────────────────────────────────────────
-export function openPrintPlot() { openModal('print-modal'); }
+export function openPrintPlot() {
+  // Show/hide DPI row based on format
+  const fmtEl = document.getElementById('print-fmt');
+  const dpiRow = document.getElementById('print-dpi-row');
+  function updateDpiRow() {
+    if (dpiRow) dpiRow.style.display = (fmtEl?.value === 'png') ? 'flex' : 'none';
+  }
+  updateDpiRow();
+  fmtEl?.addEventListener('change', updateDpiRow);
+  openModal('print-modal');
+}
 export function closePrintPlot() { closeModal('print-modal'); }
 
 export function executePrint() {
-  const fmt = document.getElementById('print-fmt')?.value || 'pdf';
+  const fmt     = document.getElementById('print-fmt')?.value || 'pdf';
+  const margins = parseInt(document.getElementById('print-margins')?.value || '10');
+  const dpi     = parseInt(document.getElementById('print-dpi')?.value || '300');
+  const area    = document.getElementById('print-area')?.value || 'all';
+  const scale   = document.getElementById('print-scale')?.value || 'fit';
+  const paper   = document.getElementById('print-paper')?.value || 'a4';
+  const orient  = document.getElementById('print-orient')?.value || 'landscape';
+
   if (fmt === 'pdf') {
+    // Apply @page CSS for chosen paper/orientation/margins, then print
+    const pageCSS = `@page { size: ${paper} ${orient}; margin: ${margins}mm; }`;
+    let styleEl = document.getElementById('_print-page-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = '_print-page-style';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = pageCSS;
     window.print();
-    setStatus('Browser print dialog opened.');
-  } else {
-    // PNG export via canvas
-    const canvas = document.getElementById('canvas');
-    if (!canvas) return;
+    setStatus(`PDF print dialog opened (${paper} ${orient}, ${margins}mm margins).`);
+  } else if (fmt === 'svg') {
+    if (!state.wasmReady || !window.cadExportSVG) { setStatus('SVG export requires WASM.'); return; }
+    const svg = window.cadExportSVG();
     const a = document.createElement('a');
-    a.href     = canvas.toDataURL('image/png');
-    a.download = 'drawing.png';
+    a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    a.download = 'drawing.svg';
     a.click();
-    setStatus('Exported drawing.png');
+    URL.revokeObjectURL(a.href);
+    setStatus('Exported drawing.svg');
+  } else {
+    // PNG export — scale canvas to requested DPI
+    const srcCanvas = document.getElementById('canvas');
+    if (!srcCanvas) return;
+    const scaleFactor = dpi / 96;
+    const offscreen = document.createElement('canvas');
+    offscreen.width  = Math.round(srcCanvas.width  * scaleFactor);
+    offscreen.height = Math.round(srcCanvas.height * scaleFactor);
+    const ctx2 = offscreen.getContext('2d');
+    ctx2.scale(scaleFactor, scaleFactor);
+    ctx2.drawImage(srcCanvas, 0, 0);
+    const a = document.createElement('a');
+    a.href     = offscreen.toDataURL('image/png');
+    a.download = `drawing_${dpi}dpi.png`;
+    a.click();
+    setStatus(`Exported drawing_${dpi}dpi.png (${offscreen.width}×${offscreen.height}px)`);
   }
   closePrintPlot();
 }
@@ -337,16 +426,18 @@ export function initDialogs() {
     if (e.target === document.getElementById('sym-modal')) closeSymbolsPanel();
   });
 
-  // Drafting settings
+  // Drafting settings — wire both close buttons (✕ header + Cancel footer)
   document.getElementById('btn-drafting')?.addEventListener('click', openDraftingSettings);
+  document.getElementById('btn-close-drafting-x')?.addEventListener('click', closeDraftingSettings);
   document.getElementById('btn-close-drafting')?.addEventListener('click', closeDraftingSettings);
   document.getElementById('btn-apply-drafting')?.addEventListener('click', applyDraftingSettings);
   document.getElementById('drafting-modal')?.addEventListener('click', e => {
     if (e.target === document.getElementById('drafting-modal')) closeDraftingSettings();
   });
 
-  // Print/Plot
+  // Print/Plot — wire both close buttons (✕ header + Cancel footer)
   document.getElementById('btn-print')?.addEventListener('click', openPrintPlot);
+  document.getElementById('btn-close-print-x')?.addEventListener('click', closePrintPlot);
   document.getElementById('btn-close-print')?.addEventListener('click', closePrintPlot);
   document.getElementById('btn-execute-print')?.addEventListener('click', executePrint);
   document.getElementById('print-modal')?.addEventListener('click', e => {

@@ -48,7 +48,7 @@ export function snapWorldPt(sx, sy) {
     const raw = window.cadFindSnap(wx, wy, threshWorld, mask);
     if (!raw) return null;
     const result = JSON.parse(raw);
-    if (!result || !result.x) return null;
+    if (!result || typeof result.x !== 'number') return null;
     // Normalise .type → .kind (lower-case) for consistent use in drawSnapMarker
     return { x: result.x, y: result.y, kind: (result.type || 'nearest').toLowerCase(), entityID: result.entityID };
   } catch (_) {

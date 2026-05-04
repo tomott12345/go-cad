@@ -15,6 +15,12 @@ export function addHistoryEntry(cmd, result = '') {
   renderHistory();
 }
 
+export function updateLastResult(result) {
+  if (entries.length === 0) return;
+  entries[entries.length - 1].result = String(result || '');
+  renderHistory();
+}
+
 function renderHistory() {
   const el = document.getElementById('history-list');
   if (!el) return;

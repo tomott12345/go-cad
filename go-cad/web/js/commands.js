@@ -2,7 +2,7 @@
 import { state, setStatus, escH, invalidateBlockCache } from './state.js';
 import { render, zoomFit } from './canvas.js';
 import { setTool, tryDelete, commitEntity, applyCoordInput } from './tools.js';
-import { addHistoryEntry } from './history.js';
+import { addHistoryEntry, updateLastResult } from './history.js';
 
 const toolMap = {
   LINE:'line', L:'line',
@@ -55,6 +55,9 @@ export function processCommand(raw) {
 
   addHistoryEntry(raw);
 
+  // Wrap setStatus so every call also updates the history entry result
+  const _st = (msg) => { setStatus(msg); updateLastResult(msg); };
+
   // ── Coordinate input (point entry from command bar) ──────────────────────
   if (applyCoordInput(raw)) { return; }
 
@@ -77,8 +80,8 @@ export function processCommand(raw) {
       else { bx = firstEnt.x1||0; by = firstEnt.y1||0; }
     }
     const ok = window.cadDefineBlock(bname, bx, by, JSON.stringify(ids));
-    if (ok) { invalidateBlockCache(bname); setStatus(`Block "${bname}" defined with ${ids.length} entity(s).`); }
-    else setStatus('DEFINEBLOCK failed — ensure entity IDs exist.');
+    if (ok) { invalidateBlockCache(bname); _st(`Block "${bname}" defined with ${ids.length} entity(s).`); }
+    else _st('DEFINEBLOCK failed — ensure entity IDs exist.');
     render(); return;
   }
 
@@ -87,7 +90,7 @@ export function processCommand(raw) {
     const eid = parseInt(parts[1]);
     if (!isNaN(eid)) {
       const r = window.cadExplodeBlock(eid);
-      setStatus(r && r !== 'null' ? `Exploded block ${eid} → ${r}` : `Entity ${eid} is not a block reference.`);
+      _st(r && r !== 'null' ? `Exploded block ${eid} → ${r}` : `Entity ${eid} is not a block reference.`);
       render();
     }
     return;
@@ -101,7 +104,7 @@ export function processCommand(raw) {
     const sy2 = parts[5] ? parseFloat(parts[5]) : sx;
     const rot = parts[6] ? parseFloat(parts[6]) : 0;
     const id  = window.cadInsertBlock(name, x, y, sx, sy2, rot, state.currentLayer, state.currentColor);
-    setStatus(id >= 0 ? `Inserted block "${name}" id=${id}` : `Block "${name}" not found.`);
+    _st(id >= 0 ? `Inserted block "${name}" id=${id}` : `Block "${name}" not found.`);
     render(); return;
   }
 
@@ -164,24 +167,24 @@ export function processCommand(raw) {
   if (state.wasmReady && state.selectedId && verb === 'MIRRORCOPY') {
     state.editPickIds = ['copy'];
     setTool('mirror');
-    setStatus('Mirror-Copy: click first point on mirror axis.'); return;
+    _st('Mirror-Copy: click first point on mirror axis.'); return;
   }
   if (state.wasmReady && state.selectedId && verb === 'FILLET' && parts.length >= 2) {
     const r=parseFloat(parts[1]);
     state.editPickIds=[state.selectedId,r];
     setTool('fillet');
-    setStatus(`Fillet r=${r}: click the second line.`); return;
+    _st(`Fillet r=${r}: click the second line.`); return;
   }
   if (state.wasmReady && (state.currentTool === 'fillet') && state.editPickIds.length === 1 && verb === 'FILLET' && parts.length >= 2) {
     const r=parseFloat(parts[1]);
-    setStatus(`Fillet r=${r}: now click the second line.`);
+    _st(`Fillet r=${r}: now click the second line.`);
     state.editPickIds.push(r); return;
   }
   if (state.wasmReady && state.selectedId && verb === 'CHAMFER' && parts.length >= 3) {
     const d1=parseFloat(parts[1]),d2=parseFloat(parts[2]);
     state.editPickIds=[state.selectedId,d1,d2];
     setTool('chamfer');
-    setStatus(`Chamfer d1=${d1} d2=${d2}: click the second line.`); return;
+    _st(`Chamfer d1=${d1} d2=${d2}: click the second line.`); return;
   }
   if (state.wasmReady && state.selectedId && verb === 'ARRAYRECT' && parts.length >= 5) {
     const rows=parseInt(parts[1]),cols=parseInt(parts[2]);
@@ -199,32 +202,33 @@ export function processCommand(raw) {
   if (state.wasmReady && state.selectedId && verb === 'OFFSET' && parts.length >= 2) {
     const dist=parseFloat(parts[1]);
     const newIDs=JSON.parse(window.cadOffset([state.selectedId],dist)||'[]');
-    setStatus(newIDs.length>0 ? `Offset OK: ${newIDs.length} entity(ies).` : 'Offset failed.');
+    _st(newIDs.length>0 ? `Offset OK: ${newIDs.length} entity(ies).` : 'Offset failed.');
     render(); return;
   }
 
   // ── Tool map ───────────────────────────────────────────────────────────────
   const action = toolMap[cmd];
-  if (!action) { setStatus(`Unknown command: ${raw}`); return; }
+  if (!action) { _st(`Unknown command: ${raw}`); return; }
 
   switch (action) {
     case 'undo':
       if (state.wasmReady) window.cadUndo();
-      render(); break;
+      _st('Undo'); render(); break;
     case 'redo':
       if (state.wasmReady) window.cadRedo();
-      render(); break;
+      _st('Redo'); render(); break;
     case 'delete':
       if (state.wasmReady && state.selectedId) {
-        tryDelete(state.selectedId); state.selectedId = 0; render();
+        tryDelete(state.selectedId); state.selectedId = 0;
+        _st('Entity deleted'); render();
       }
       break;
     case 'clear':
       if (state.wasmReady) window.cadClear();
       invalidateBlockCache();
-      render(); break;
+      _st('Drawing cleared'); render(); break;
     case 'zoomfit':
-      zoomFit(); break;
+      _st('Zoom to fit'); zoomFit(); break;
     case 'export':
       exportDXF(); break;
     case 'drafting':
@@ -232,7 +236,7 @@ export function processCommand(raw) {
     case 'print':
       import('./dialogs.js').then(m => m.openPrintPlot()); break;
     default:
-      setTool(action);
+      _st(`Tool: ${action}`); setTool(action);
   }
 }
 
