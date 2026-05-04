@@ -1,13 +1,14 @@
-// cmd/serve is a tiny development HTTP server for the go-cad web app.
-// It serves the web/ directory with HTTP/1.1 and correct MIME types,
-// which is required for WebAssembly.instantiateStreaming to work reliably
-// in all browsers (Python's built-in server responds with HTTP/1.0).
+// cmd/serve is the go-cad HTTP development server.
+// It serves:
+//   - The REST API under /api/v1/ (backed by a live in-memory document)
+//   - Static files from the web/ directory for the browser client
 //
 // Usage (from the repo root):
 //
-//	go run ./cmd/serve          # serves web/ on :8080
+//	go run ./cmd/serve                    # serves web/ + API on :8080
 //	go run ./cmd/serve -port 9090
 //	go run ./cmd/serve -dir ./web -port 8080
+//	go run ./cmd/serve -plugins ./plugins  # load plugins from directory
 package main
 
 import (
@@ -17,28 +18,54 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"go-cad/internal/document"
+	"go-cad/internal/pluginhost"
+	"go-cad/pkg/plugin/loader"
 )
 
 func main() {
-	host := flag.String("host", "127.0.0.1", "host/IP to bind (default: localhost only; use 0.0.0.0 to expose on LAN)")
-	port := flag.String("port", "8080", "port to listen on")
-	dir := flag.String("dir", "web", "directory to serve")
+	host := flag.String("host", "0.0.0.0", "host/IP to bind (0.0.0.0 for all interfaces)")
+	port := flag.String("port", os.Getenv("PORT"), "port to listen on (default: $PORT or 8080)")
+	dir := flag.String("dir", "web", "directory to serve static files from")
+	pluginDir := flag.String("plugins", "", "extra plugin directory to scan (in addition to defaults)")
 	flag.Parse()
 
-	// Ensure application/wasm is registered — some OS MIME databases omit it.
+	if *port == "" {
+		*port = "8080"
+	}
+
+	// Ensure application/wasm is registered.
 	_ = mime.AddExtensionType(".wasm", "application/wasm")
 
-	// Resolve the directory relative to the working directory.
-	abs, err := filepath.Abs(*dir)
-	if err != nil || !dirExists(abs) {
-		log.Fatalf("serve: directory %q not found (run from the repo root)", *dir)
+	// Initialise document and plugin host.
+	doc := document.New()
+	phost := pluginhost.New(doc)
+
+	// Load plugins from default directories + any extra directory.
+	cfg := loader.DefaultConfig()
+	if *pluginDir != "" {
+		cfg.Dirs = append(cfg.Dirs, *pluginDir)
+	}
+	ldr := loader.New(cfg)
+	for _, err := range ldr.LoadAll(phost) {
+		log.Printf("plugin load warning: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(abs)))
+
+	// Register REST API routes.
+	api := &apiHandler{doc: doc, host: phost}
+	registerRoutes(mux, api)
+
+	// Serve static files (web client) at the root — only if the directory exists.
+	abs, err := filepath.Abs(*dir)
+	if err == nil && dirExists(abs) {
+		mux.Handle("/", http.FileServer(http.Dir(abs)))
+	}
 
 	addr := *host + ":" + *port
-	log.Printf("go-cad dev server  →  http://%s  (serving %s)", addr, abs)
+	log.Printf("go-cad server  →  http://%s  (API: /api/v1/, static: %s)", addr, abs)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}

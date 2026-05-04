@@ -1,0 +1,423 @@
+openapi: 3.0.3
+info:
+  title: go-cad REST API
+  version: 1.0.0
+  description: |
+    REST API for the go-cad CAD engine. Provides full programmatic access to
+    the in-memory document, plugin system, and command palette.
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+tags:
+  - name: entities
+    description: Entity (geometry primitive) operations
+  - name: document
+    description: Document-level operations (metadata, undo/redo, save/load)
+  - name: plugins
+    description: Plugin management
+  - name: commands
+    description: Command palette
+
+paths:
+  /entities:
+    get:
+      summary: List all entities
+      tags: [entities]
+      operationId: getEntities
+      responses:
+        "200":
+          description: Array of all entities in the document
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Entity"
+              example:
+                - id: 1
+                  type: line
+                  layer: 0
+                  color: "#ffffff"
+                  x1: 0
+                  y1: 0
+                  x2: 100
+                  y2: 0
+
+    post:
+      summary: Add a new entity
+      tags: [entities]
+      operationId: addEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntityInput"
+            examples:
+              line:
+                summary: Add a line
+                value: {type: line, x1: 0, y1: 0, x2: 100, y2: 100, layer: 0, color: "#ffffff"}
+              circle:
+                summary: Add a circle
+                value: {type: circle, cx: 50, cy: 50, r: 25}
+              arc:
+                summary: Add an arc
+                value: {type: arc, cx: 0, cy: 0, r: 50, startDeg: 0, endDeg: 90}
+              rectangle:
+                summary: Add a rectangle
+                value: {type: rectangle, x1: 0, y1: 0, x2: 200, y2: 100}
+              polyline:
+                summary: Add a polyline
+                value: {type: polyline, points: [[0,0],[50,50],[100,0]]}
+      responses:
+        "201":
+          description: Entity created; returns the assigned ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    description: Assigned entity ID
+              example: {id: 1}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /entities/{id}:
+    delete:
+      summary: Delete an entity
+      tags: [entities]
+      operationId: deleteEntity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the entity to delete
+      responses:
+        "204":
+          description: Entity deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /document:
+    get:
+      summary: Get document metadata
+      tags: [document]
+      operationId: getDocument
+      responses:
+        "200":
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentMeta"
+              example:
+                entityCount: 3
+                layers: [0, 1, 2]
+                bbox:
+                  minX: -10
+                  minY: -5
+                  maxX: 200
+                  maxY: 100
+
+  /document/undo:
+    post:
+      summary: Undo the last operation
+      tags: [document]
+      operationId: undo
+      responses:
+        "200":
+          description: Undo result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoolResult"
+              example: {ok: true}
+
+  /document/redo:
+    post:
+      summary: Redo the last undone operation
+      tags: [document]
+      operationId: redo
+      responses:
+        "200":
+          description: Redo result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoolResult"
+              example: {ok: true}
+
+  /document/save:
+    post:
+      summary: Save the document to a JSON file
+      tags: [document]
+      operationId: saveDocument
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                  description: File system path to write. Defaults to "go-cad-document.json".
+            example: {path: "/home/user/drawing.json"}
+      responses:
+        "200":
+          description: Document saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+              example: {path: "/home/user/drawing.json"}
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /document/load:
+    post:
+      summary: Load a document from a JSON file
+      tags: [document]
+      operationId: loadDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                  description: File system path to read
+            example: {path: "/home/user/drawing.json"}
+      responses:
+        "200":
+          description: Document loaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entityCount:
+                    type: integer
+              example: {entityCount: 5}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          description: File not found or invalid JSON
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /plugins:
+    get:
+      summary: List loaded plugins
+      tags: [plugins]
+      operationId: getPlugins
+      responses:
+        "200":
+          description: Array of loaded plugin info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PluginInfo"
+              example:
+                - name: dimension-tool
+                  version: "1.0.0"
+
+  /command:
+    post:
+      summary: Execute a named command
+      tags: [commands]
+      operationId: executeCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command:
+                  type: string
+                  description: Command name (e.g. "LINE", "DIM")
+                args:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional positional arguments
+            examples:
+              dim:
+                summary: Draw a linear dimension
+                value: {command: DIM, args: ["0,0", "100,0"]}
+              builtin:
+                summary: Execute a built-in command alias
+                value: {command: LINE, args: []}
+      responses:
+        "200":
+          description: Command executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: string
+              example: {ok: "true"}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Command not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    Entity:
+      type: object
+      description: A CAD geometry primitive stored in the document
+      required: [id, type]
+      properties:
+        id:
+          type: integer
+          description: Unique entity ID assigned by the document
+        type:
+          type: string
+          enum: [line, circle, arc, rectangle, polyline]
+        layer:
+          type: integer
+          default: 0
+        color:
+          type: string
+          default: "#ffffff"
+        x1:
+          type: number
+          description: Start X (line / rectangle)
+        y1:
+          type: number
+          description: Start Y (line / rectangle)
+        x2:
+          type: number
+          description: End X (line / rectangle)
+        y2:
+          type: number
+          description: End Y (line / rectangle)
+        cx:
+          type: number
+          description: Centre X (circle / arc)
+        cy:
+          type: number
+          description: Centre Y (circle / arc)
+        r:
+          type: number
+          description: Radius (circle / arc)
+        startDeg:
+          type: number
+          description: Start angle in degrees (arc)
+        endDeg:
+          type: number
+          description: End angle in degrees (arc)
+        points:
+          type: array
+          description: Vertex list (polyline) — each element is [x, y]
+          items:
+            type: array
+            items:
+              type: number
+            minItems: 2
+            maxItems: 2
+
+    EntityInput:
+      allOf:
+        - $ref: "#/components/schemas/Entity"
+      description: >
+        Entity for creation.  The `id` field is optional and ignored;
+        the server assigns a new ID.
+
+    DocumentMeta:
+      type: object
+      properties:
+        entityCount:
+          type: integer
+        layers:
+          type: array
+          items:
+            type: integer
+        bbox:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/BBox"
+
+    BBox:
+      type: object
+      description: Axis-aligned bounding box
+      properties:
+        minX:
+          type: number
+        minY:
+          type: number
+        maxX:
+          type: number
+        maxY:
+          type: number
+
+    BoolResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+
+    PluginInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request — invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
