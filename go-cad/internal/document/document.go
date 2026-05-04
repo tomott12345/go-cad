@@ -822,12 +822,15 @@ func (d *Document) exportDXF(r12 bool) string {
         }
         for _, blk := range d.blocks {
                 ln0 := "0"
+                // Entities are stored in block-local coordinates (base = origin),
+                // so the DXF BLOCK base point is always (0,0). Using the original
+                // world BaseX/BaseY here would double-offset INSERT placement.
                 if r12 {
-                        fmt.Fprintf(&sb, "  0\nBLOCK\n  8\n%s\n  2\n%s\n 70\n0\n 10\n%f\n 20\n%f\n",
-                                ln0, blk.Name, blk.BaseX, -blk.BaseY)
+                        fmt.Fprintf(&sb, "  0\nBLOCK\n  8\n%s\n  2\n%s\n 70\n0\n 10\n0.0\n 20\n0.0\n",
+                                ln0, blk.Name)
                 } else {
-                        fmt.Fprintf(&sb, "  0\nBLOCK\n  8\n%s\n100\nAcDbEntity\n100\nAcDbBlockBegin\n  2\n%s\n 70\n0\n 10\n%f\n 20\n%f\n 30\n0.0\n  3\n%s\n  1\n\n",
-                                ln0, blk.Name, blk.BaseX, -blk.BaseY, blk.Name)
+                        fmt.Fprintf(&sb, "  0\nBLOCK\n  8\n%s\n100\nAcDbEntity\n100\nAcDbBlockBegin\n  2\n%s\n 70\n0\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  3\n%s\n  1\n\n",
+                                ln0, blk.Name, blk.Name)
                 }
                 // Emit each block-local entity (simplified: lines, circles, arcs, polylines, text).
                 for _, be := range blk.Entities {
