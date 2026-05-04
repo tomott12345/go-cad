@@ -745,6 +745,12 @@ canvas.addEventListener('mousemove', e=>{
   tempPt=[wx,wy];
   const dispX=snapResult?snapResult.x:wx, dispY=snapResult?snapResult.y:wy;
   document.getElementById('coords').textContent=`${dispX.toFixed(2)}, ${dispY.toFixed(2)}`;
+  // Show active snap mode in status bar (Task #5)
+  if(snapResult&&snapEnabled){
+    const col=snapColors[snapResult.type]||'#fff';
+    document.getElementById('status').innerHTML=
+      `<span style="color:${col};font-weight:600">${snapResult.type}</span> snap — click to use`;
+  }
   drawSnapMarker();
   if(clicks.length>0) render();
 });
@@ -1146,19 +1152,21 @@ const LAYER_DASH = {
 };
 
 // Resolve BYLAYER color and line type from the cached layer map.
+// Color: use entity's explicit color unless it is BYLAYER/empty → inherit from layer.
+// LineType: always inherited from layer (entities don't store an explicit linetype).
 // Returns {color, dash[]} for drawing.
 function resolveEntityStyle(e, sel){
   if(sel) return {color:'#ff9800', dash:[]};
   let color = e.color || '';
   let dash   = [];
-  if(!color || color.toUpperCase()==='BYLAYER' || color===''){
-    // Look up layer from cached list
-    if(window._layerCache){
-      const lyr = window._layerCache[e.layer||0];
-      if(lyr){ color=lyr.color; dash=LAYER_DASH[lyr.lineType]||[]; }
-    }
+  const lyr = window._layerCache ? (window._layerCache[e.layer||0]||null) : null;
+  // Linetype is always taken from the layer (BYLAYER by default in CAD)
+  if(lyr) dash = LAYER_DASH[lyr.lineType] || [];
+  // Color: BYLAYER or missing → use layer color
+  if(!color || color.toUpperCase()==='BYLAYER'){
+    color = lyr ? lyr.color : '#ffffff';
   }
-  if(!color||color==='BYLAYER') color='#ffffff';
+  if(!color) color='#ffffff';
   return {color, dash};
 }
 

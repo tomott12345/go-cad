@@ -300,14 +300,20 @@ func (d *Document) writeDXFLayerTable(sb *strings.Builder, r12 bool) {
                 flags := dxfLayerFlags(l)
                 aci := rgbToACI(l.Color)
                 ltName := dxfLTypeName(l.LineTyp)
+                // Use negative ACI to signal "no print" (AutoCAD/QCAD convention).
+                plotACI := aci
+                if !l.PrintEnabled {
+                        plotACI = -aci
+                }
                 if r12 {
+                        // R12 has no print flag; just emit positive ACI.
                         fmt.Fprintf(sb, "  0\nLAYER\n  2\n%s\n 70\n%d\n 62\n%d\n  6\n%s\n",
                                 l.Name, flags, aci, ltName)
                 } else {
                         lw := dxfLineWeightCode(l.LineWeight)
                         fmt.Fprintf(sb,
                                 "  0\nLAYER\n100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n  2\n%s\n 70\n%d\n 62\n%d\n  6\n%s\n370\n%d\n",
-                                l.Name, flags, aci, ltName, lw)
+                                l.Name, flags, plotACI, ltName, lw)
                 }
         }
         sb.WriteString("  0\nENDTAB\n  0\nENDSEC\n")
