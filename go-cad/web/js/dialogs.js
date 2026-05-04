@@ -87,7 +87,7 @@ export function refreshLayerTable() {
       <td><input type="checkbox" ${l.visible?'checked':''} data-lid="${l.id}" class="layer-check layer-vis" aria-label="Visible"></td>
       <td><input type="checkbox" ${l.locked?'checked':''} data-lid="${l.id}" class="layer-check layer-lck" aria-label="Locked"></td>
       <td><input type="checkbox" ${l.frozen?'checked':''} data-lid="${l.id}" class="layer-check layer-frz" aria-label="Frozen"></td>
-      <td><input type="checkbox" ${l.print!==false?'checked':''} data-lid="${l.id}" class="layer-check layer-prt" aria-label="Print"></td>
+      <td><input type="checkbox" ${l.printEnabled!==false?'checked':''} data-lid="${l.id}" class="layer-check layer-prt" aria-label="Print"></td>
       <td><button class="layer-btn layer-del" data-lid="${l.id}" ${l.id===0?'disabled':''} aria-label="Delete layer">Del</button></td>
     </tr>`).join('');
 
@@ -330,21 +330,22 @@ export function applyDraftingSettings() {
 
 // ── Print / Plot Dialog ────────────────────────────────────────────────────────
 export function openPrintPlot() {
-  // Show/hide DPI row based on format
-  const fmtEl  = document.getElementById('print-fmt');
-  const dpiRow = document.getElementById('print-dpi-row');
-  function updateDpiRow() {
-    if (dpiRow) dpiRow.style.display = (fmtEl?.value === 'png') ? 'flex' : 'none';
-  }
-  updateDpiRow();
-  fmtEl?.addEventListener('change', updateDpiRow);
-
-  // Plot-area preview overlay — show on canvas behind dialog
+  // Show/hide DPI row and update plot preview (listeners are registered once in initDialogs)
+  _syncPrintDpiRow();
   createPlotPreviewEl();
   updatePlotPreview();
-  document.getElementById('print-area')?.addEventListener('change', updatePlotPreview);
-
   openModal('print-modal');
+}
+
+// Called once from initDialogs — registers all Print/Plot change listeners exactly once.
+function _initPrintListeners() {
+  document.getElementById('print-fmt')?.addEventListener('change', _syncPrintDpiRow);
+  document.getElementById('print-area')?.addEventListener('change', updatePlotPreview);
+}
+function _syncPrintDpiRow() {
+  const fmt    = document.getElementById('print-fmt')?.value;
+  const dpiRow = document.getElementById('print-dpi-row');
+  if (dpiRow) dpiRow.style.display = (fmt === 'png') ? 'flex' : 'none';
 }
 export function closePrintPlot() {
   removePlotPreview();
@@ -554,7 +555,8 @@ export function initDialogs() {
     if (e.target === document.getElementById('drafting-modal')) closeDraftingSettings();
   });
 
-  // Print/Plot — wire both close buttons (✕ header + Cancel footer)
+  // Print/Plot — wire change listeners once (idempotent), then wire buttons
+  _initPrintListeners();
   document.getElementById('btn-print')?.addEventListener('click', openPrintPlot);
   document.getElementById('btn-close-print-x')?.addEventListener('click', closePrintPlot);
   document.getElementById('btn-close-print')?.addEventListener('click', closePrintPlot);

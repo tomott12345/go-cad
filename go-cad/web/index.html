@@ -268,73 +268,73 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 <div id="topbar">
 
   <!-- Main toolbar -->
-  <div id="main-toolbar">
+  <div id="main-toolbar" role="toolbar" aria-label="Drawing tools">
     <!-- Selection -->
-    <button id="tool-select" class="active" title="Select (Esc)">Select</button>
-    <div class="sep"></div>
+    <button id="tool-select" class="active" title="Select (Esc)" aria-label="Select tool — click entity to inspect">Select</button>
+    <div class="sep" role="separator"></div>
     <!-- Draw primitives -->
-    <button id="tool-line"    title="Line (L)">Line</button>
-    <button id="tool-circle"  title="Circle (C)">Circle</button>
-    <button id="tool-arc"     title="Arc (A)">Arc</button>
-    <button id="tool-rect"    title="Rectangle (R)">Rect</button>
-    <button id="tool-poly"    title="Polyline (P)">Poly</button>
-    <div class="sep"></div>
-    <button id="tool-spline"  title="Cubic Bezier Spline (S)">Spline</button>
-    <button id="tool-nurbs"   title="NURBS B-Spline (N)">NURBS</button>
-    <button id="tool-ellipse" title="Ellipse (E)">Ellipse</button>
-    <div class="sep"></div>
-    <button id="tool-text"   title="Single-line Text (T)">Text</button>
-    <button id="tool-mtext"  title="Multi-line Text (MT)">MText</button>
-    <div class="sep"></div>
-    <button id="tool-dimlin"  title="Linear Dimension">DimLin</button>
-    <button id="tool-dimali"  title="Aligned Dimension">DimAli</button>
-    <button id="tool-dimang"  title="Angular Dimension">DimAng</button>
-    <button id="tool-dimrad"  title="Radial Dimension">DimRad</button>
-    <button id="tool-dimdia"  title="Diameter Dimension">DimDia</button>
-    <div class="sep"></div>
-    <button id="tool-move"       title="Move (M)">Move</button>
-    <button id="tool-copy"       title="Copy (CP)">Copy</button>
-    <button id="tool-rotate"     title="Rotate (RO)">Rotate</button>
-    <button id="tool-scale"      title="Scale (SC)">Scale</button>
-    <button id="tool-mirror"     title="Mirror (MI)">Mirror</button>
-    <button id="tool-trim"       title="Trim (TR)">Trim</button>
-    <button id="tool-extend"     title="Extend (EX)">Extend</button>
-    <button id="tool-fillet"     title="Fillet (F)">Fillet</button>
-    <button id="tool-chamfer"    title="Chamfer (CHA)">Chamfer</button>
-    <button id="tool-arrayrect"  title="Rectangular Array (AR)">ArrRect</button>
-    <button id="tool-arraypolar" title="Polar Array (AP)">ArrPolar</button>
-    <button id="tool-offset"     title="Offset (O)">Offset</button>
-    <div class="sep"></div>
-    <button id="tool-hatch"    title="Hatch fill (H)">Hatch</button>
-    <button id="tool-leader"   title="Leader annotation (LD)">Leader</button>
-    <button id="tool-revcloud" title="Revision Cloud (RC)">RevCloud</button>
-    <button id="tool-wipeout"  title="Wipeout mask (WP)">Wipeout</button>
-    <div class="sep"></div>
-    <button id="btn-blocks"  title="Block Manager…">Blocks…</button>
-    <button id="btn-symbols" title="Insert Symbol…">Symbols…</button>
-    <div class="sep"></div>
-    <button id="btn-open"    title="Open DXF (Ctrl+O)">Open…</button>
-    <input id="file-input" type="file" accept=".dxf" style="display:none">
-    <button id="btn-undo"    title="Undo (Ctrl+Z)">Undo</button>
-    <button id="btn-redo"    title="Redo (Ctrl+Y)">Redo</button>
-    <button id="btn-del"     title="Delete selected (Del)">Delete</button>
-    <button id="btn-clear"   title="Clear all">Clear</button>
-    <button id="btn-zoomfit" title="Zoom to fit (ZF)">Fit</button>
-    <div class="sep"></div>
-    <button id="btn-export"   title="Export">Export</button>
-    <select id="export-fmt" title="Export format">
+    <button id="tool-line"    title="Line (L)"                  aria-label="Draw line">Line</button>
+    <button id="tool-circle"  title="Circle (C)"                aria-label="Draw circle">Circle</button>
+    <button id="tool-arc"     title="Arc (A)"                   aria-label="Draw arc">Arc</button>
+    <button id="tool-rect"    title="Rectangle (R)"             aria-label="Draw rectangle">Rect</button>
+    <button id="tool-poly"    title="Polyline (P)"              aria-label="Draw polyline">Poly</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-spline"  title="Cubic Bezier Spline (S)"   aria-label="Draw spline">Spline</button>
+    <button id="tool-nurbs"   title="NURBS B-Spline (N)"        aria-label="Draw NURBS">NURBS</button>
+    <button id="tool-ellipse" title="Ellipse (E)"               aria-label="Draw ellipse">Ellipse</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-text"   title="Single-line Text (T)"       aria-label="Place single-line text">Text</button>
+    <button id="tool-mtext"  title="Multi-line Text (MT)"       aria-label="Place multi-line text">MText</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-dimlin"  title="Linear Dimension"          aria-label="Linear dimension">DimLin</button>
+    <button id="tool-dimali"  title="Aligned Dimension"         aria-label="Aligned dimension">DimAli</button>
+    <button id="tool-dimang"  title="Angular Dimension"         aria-label="Angular dimension">DimAng</button>
+    <button id="tool-dimrad"  title="Radial Dimension"          aria-label="Radial dimension">DimRad</button>
+    <button id="tool-dimdia"  title="Diameter Dimension"        aria-label="Diameter dimension">DimDia</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-move"       title="Move (M)"               aria-label="Move entity">Move</button>
+    <button id="tool-copy"       title="Copy (CP)"              aria-label="Copy entity">Copy</button>
+    <button id="tool-rotate"     title="Rotate (RO)"            aria-label="Rotate entity">Rotate</button>
+    <button id="tool-scale"      title="Scale (SC)"             aria-label="Scale entity">Scale</button>
+    <button id="tool-mirror"     title="Mirror (MI)"            aria-label="Mirror entity">Mirror</button>
+    <button id="tool-trim"       title="Trim (TR)"              aria-label="Trim entity">Trim</button>
+    <button id="tool-extend"     title="Extend (EX)"            aria-label="Extend entity">Extend</button>
+    <button id="tool-fillet"     title="Fillet (F)"             aria-label="Fillet two lines">Fillet</button>
+    <button id="tool-chamfer"    title="Chamfer (CHA)"          aria-label="Chamfer two lines">Chamfer</button>
+    <button id="tool-arrayrect"  title="Rectangular Array (AR)" aria-label="Rectangular array">ArrRect</button>
+    <button id="tool-arraypolar" title="Polar Array (AP)"       aria-label="Polar array">ArrPolar</button>
+    <button id="tool-offset"     title="Offset (O)"             aria-label="Offset entity">Offset</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-hatch"    title="Hatch fill (H)"           aria-label="Draw hatch fill">Hatch</button>
+    <button id="tool-leader"   title="Leader annotation (LD)"   aria-label="Draw leader annotation">Leader</button>
+    <button id="tool-revcloud" title="Revision Cloud (RC)"      aria-label="Draw revision cloud">RevCloud</button>
+    <button id="tool-wipeout"  title="Wipeout mask (WP)"        aria-label="Draw wipeout mask">Wipeout</button>
+    <div class="sep" role="separator"></div>
+    <button id="btn-blocks"  title="Block Manager…"             aria-label="Open block manager">Blocks…</button>
+    <button id="btn-symbols" title="Insert Symbol…"             aria-label="Insert symbol">Symbols…</button>
+    <div class="sep" role="separator"></div>
+    <button id="btn-open"    title="Open DXF (Ctrl+O)"          aria-label="Open DXF file">Open…</button>
+    <input id="file-input" type="file" accept=".dxf" style="display:none" aria-label="Choose DXF file">
+    <button id="btn-undo"    title="Undo (Ctrl+Z)"              aria-label="Undo last action">Undo</button>
+    <button id="btn-redo"    title="Redo (Ctrl+Y)"              aria-label="Redo last undone action">Redo</button>
+    <button id="btn-del"     title="Delete selected (Del)"      aria-label="Delete selected entity">Delete</button>
+    <button id="btn-clear"   title="Clear all"                  aria-label="Clear all entities">Clear</button>
+    <button id="btn-zoomfit" title="Zoom to fit (ZF)"           aria-label="Zoom to fit all entities">Fit</button>
+    <div class="sep" role="separator"></div>
+    <button id="btn-export"   title="Export"                    aria-label="Export drawing">Export</button>
+    <select id="export-fmt" title="Export format"               aria-label="Export format">
       <option value="r2000">DXF R2000</option>
       <option value="r12">DXF R12</option>
       <option value="svg">SVG</option>
     </select>
-    <div class="sep"></div>
-    <button id="btn-print"    title="Print / Plot…">Print…</button>
-    <button id="btn-drafting" title="Drafting Settings…">Settings…</button>
-    <div class="sep"></div>
-    <label style="color:var(--text-dim);font-size:10px">Layer</label>
-    <select id="layer-sel" title="Current drawing layer"></select>
-    <button id="btn-layers" title="Layer Manager…">Layers…</button>
-    <input type="color" id="color-inp" value="#00ff00" title="Entity colour">
+    <div class="sep" role="separator"></div>
+    <button id="btn-print"    title="Print / Plot…"             aria-label="Open print and plot dialog">Print…</button>
+    <button id="btn-drafting" title="Drafting Settings…"        aria-label="Open drafting settings">Settings…</button>
+    <div class="sep" role="separator"></div>
+    <label style="color:var(--text-dim);font-size:10px" for="layer-sel">Layer</label>
+    <select id="layer-sel" title="Current drawing layer"        aria-label="Current drawing layer"></select>
+    <button id="btn-layers" title="Layer Manager…"              aria-label="Open layer manager">Layers…</button>
+    <input type="color" id="color-inp" value="#00ff00" title="Entity colour" aria-label="Entity colour">
   </div>
 
   <!-- Snap toolbar row -->
