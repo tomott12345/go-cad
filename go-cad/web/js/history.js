@@ -3,6 +3,11 @@ import { escH } from './state.js';
 
 const entries = []; // { cmd, result, time }
 
+// Set by app.js after both history and commands are initialised
+// to avoid a circular import (commands → history → commands).
+let _replayCb = null;
+export function setReplayCallback(fn) { _replayCb = fn; }
+
 export function addHistoryEntry(cmd, result = '') {
   const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   entries.push({ cmd: String(cmd), result: String(result || ''), time });
@@ -21,8 +26,15 @@ function renderHistory() {
     </div>`).join('');
   el.querySelectorAll('.hist-entry').forEach(row => {
     row.addEventListener('click', () => {
-      const inp = document.getElementById('cmd-input');
-      if (inp) { inp.value = row.dataset.cmd; inp.focus(); }
+      const cmd = row.dataset.cmd;
+      // Re-execute the command via the registered callback
+      if (_replayCb) {
+        _replayCb(cmd);
+      } else {
+        // Fallback: just fill the input
+        const inp = document.getElementById('cmd-input');
+        if (inp) { inp.value = cmd; inp.focus(); }
+      }
     });
   });
 }

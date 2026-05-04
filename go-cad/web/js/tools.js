@@ -181,7 +181,7 @@ export function commitEntity() {
     }
     case 'revcloud':
       if (clicks.length >= 3)
-        id = window.cadAddRevCloud(clicks,lay,col);
+        id = window.cadAddRevisionCloud(clicks, 1, lay, col);
       else setStatus('RevCloud needs ≥3 points');
       break;
     case 'wipeout':
@@ -255,6 +255,8 @@ function onMouseDown(e) {
       if (best) {
         state.selectedId    = best;
         state.editPickIds   = [best];
+        const found = ents.find(e => e.id === best);
+        if (found) showEntityProperties(found);
         setStatus(`${state.currentTool}: entity ${best} selected. Now pick second point or type command.`);
         render();
       } else {

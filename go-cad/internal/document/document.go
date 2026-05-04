@@ -590,6 +590,51 @@ func (d *Document) SetEntityProp(id int, field, value string) bool {
                         if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
                                 e.TextHeight = f
                         }
+                case "x1":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.X1 = f
+                        }
+                case "y1":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.Y1 = f
+                        }
+                case "x2":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.X2 = f
+                        }
+                case "y2":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.Y2 = f
+                        }
+                case "cx":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.CX = f
+                        }
+                case "cy":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.CY = f
+                        }
+                case "r":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.R = f
+                        }
+                case "startDeg":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.StartDeg = f
+                        }
+                case "endDeg":
+                        var f float64
+                        if _, err := fmt.Sscanf(value, "%f", &f); err == nil {
+                                e.EndDeg = f
+                        }
                 default:
                         return false
                 }

@@ -7,7 +7,7 @@ import { setTool, initTools, tryDelete, commitEntity } from './tools.js';
 import { initCommandBar, processCommand }          from './commands.js';
 import { initPanels }                              from './panels.js';
 import { initInspector }                           from './inspector.js';
-import { initHistory }                             from './history.js';
+import { initHistory, setReplayCallback }           from './history.js';
 import { initWelcome }                             from './welcome.js';
 import { initDialogs, refreshLayers, openLayerManager,
          openBlockManager, openSymbolsPanel,
@@ -35,6 +35,7 @@ import { initDialogs, refreshLayers, openLayerManager,
 
   // 6. Command bar
   initCommandBar();
+  setReplayCallback(processCommand);
 
   // 7. WASM
   try {

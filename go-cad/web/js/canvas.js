@@ -611,12 +611,22 @@ export function zoomFit() {
 
 export function entitySamplePoints(e) {
   switch (e.type) {
-    case 'line':      return [[e.x1,e.y1],[e.x2,e.y2]];
-    case 'circle': case 'arc':
-      return [[e.cx+e.r,e.cy],[e.cx-e.r,e.cy],[e.cx,e.cy+e.r],[e.cx,e.cy-e.r]];
-    case 'rectangle': return [[e.x1,e.y1],[e.x2,e.y2]];
+    case 'line': {
+      // Include midpoint and quarter-points so clicking anywhere on the line works
+      const mx = (e.x1+e.x2)/2, my = (e.y1+e.y2)/2;
+      return [[e.x1,e.y1],[e.x2,e.y2],[mx,my],
+              [(e.x1+mx)/2,(e.y1+my)/2],[(e.x2+mx)/2,(e.y2+my)/2]];
+    }
+    case 'circle':
+      return [[e.cx+e.r,e.cy],[e.cx-e.r,e.cy],[e.cx,e.cy+e.r],[e.cx,e.cy-e.r],[e.cx,e.cy]];
+    case 'arc':
+      return [[e.cx+e.r,e.cy],[e.cx-e.r,e.cy],[e.cx,e.cy+e.r],[e.cx,e.cy-e.r],[e.cx,e.cy]];
+    case 'rectangle': {
+      const mx2=(e.x1+e.x2)/2, my2=(e.y1+e.y2)/2;
+      return [[e.x1,e.y1],[e.x2,e.y2],[e.x2,e.y1],[e.x1,e.y2],[mx2,my2]];
+    }
     case 'polyline': case 'spline': case 'nurbs': return e.points||[];
-    case 'ellipse':  return [[e.cx+(e.r||0),e.cy],[e.cx-(e.r||0),e.cy],[e.cx,e.cy+(e.r2||0)],[e.cx,e.cy-(e.r2||0)]];
+    case 'ellipse':  return [[e.cx+(e.r||0),e.cy],[e.cx-(e.r||0),e.cy],[e.cx,e.cy+(e.r2||0)],[e.cx,e.cy-(e.r2||0)],[e.cx,e.cy]];
     case 'text': case 'mtext': return [[e.x1,e.y1]];
     case 'blockref': return [[e.x1,e.y1]];
     case 'hatch': case 'revcloud': case 'wipeout': return (e.points||[]).map(p=>[p[0],p[1]]);

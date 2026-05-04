@@ -37,7 +37,7 @@ export function installDemoStubs() {
   window.cadAddDiameterDim = (cx,cy,r,ang,l,c)        => mk({type:'dimdia',cx,cy,r,rotDeg:ang,layer:l,color:c});
   window.cadAddHatch       = (pts,pat,ang,sc,l,c)     => mk({type:'hatch',points:pts,text:pat,layer:l,color:c});
   window.cadAddLeader      = (pts,txt,l,c)            => mk({type:'leader',points:pts,text:txt,layer:l,color:c});
-  window.cadAddRevCloud    = (pts,l,c)                => mk({type:'revcloud',points:pts,layer:l,color:c});
+  window.cadAddRevisionCloud = (pts,arcLen,l,c)       => mk({type:'revcloud',points:pts,layer:l,color:c});
   window.cadAddWipeout     = (pts,l,c)                => mk({type:'wipeout',points:pts,layer:l,color:c});
   window.cadDeleteEntity   = id => { const i=ents.findIndex(e=>e.id===id); if(i>=0){ents.splice(i,1);return true;} return false; };
   window.cadUndo           = () => { if(ents.length>0){ents.pop();return true;} return false; };
@@ -111,7 +111,11 @@ export function installDemoStubs() {
   window.cadSetLayerLocked  = () => {};
   window.cadSetLayerFrozen  = () => {};
   window.cadSetLayerColor   = () => {};
-  window.cadSetLayerLineType= () => {};
+  window.cadSetLayerLineType   = () => {};
+  window.cadSetLayerLineWeight = () => {};
+  window.cadSetLayerPrint      = () => {};
+  window.cadSetLayerName       = () => {};
+  window.cadRemoveLayer        = () => false;
   window.cadDefineBlock   = () => true;
   window.cadInsertBlock   = () => -1;
   window.cadGetBlocks     = () => '[]';
@@ -121,7 +125,7 @@ export function installDemoStubs() {
   window.cadGetSymbols    = () => '[]';
   window.cadBoundingBox   = () => '';
   window.cadSnapToEntity  = () => '';
-  window.cadSnapQueryAll  = () => '[]';
+  window.cadFindSnap      = () => '';
   window.cadIntersect     = () => '';
   window.cadRenderHatch   = () => '[]';
   window.cadLoadDXF       = () => JSON.stringify({ok:false,error:'Demo mode — WASM not loaded'});
@@ -131,8 +135,17 @@ export function installDemoStubs() {
     if (field === 'color') { e.color = value; return true; }
     if (field === 'layer') { e.layer = parseInt(value); return true; }
     if (field === 'text')  { e.text  = value; return true; }
-    if (field === 'rotDeg') { e.rotDeg = parseFloat(value); return true; }
+    if (field === 'rotDeg')     { e.rotDeg = parseFloat(value); return true; }
     if (field === 'textHeight') { e.textHeight = parseFloat(value); return true; }
+    if (field === 'x1')        { e.x1 = parseFloat(value); return true; }
+    if (field === 'y1')        { e.y1 = parseFloat(value); return true; }
+    if (field === 'x2')        { e.x2 = parseFloat(value); return true; }
+    if (field === 'y2')        { e.y2 = parseFloat(value); return true; }
+    if (field === 'cx')        { e.cx = parseFloat(value); return true; }
+    if (field === 'cy')        { e.cy = parseFloat(value); return true; }
+    if (field === 'r')         { e.r  = parseFloat(value); return true; }
+    if (field === 'startDeg')  { e.startDeg = parseFloat(value); return true; }
+    if (field === 'endDeg')    { e.endDeg   = parseFloat(value); return true; }
     return false;
   };
 }

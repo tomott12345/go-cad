@@ -22,6 +22,10 @@ export function initWelcome() {
   });
   overlay.querySelector('#btn-welcome-close')?.addEventListener('click', hideWelcome);
   overlay.addEventListener('click', e => { if (e.target === overlay) hideWelcome(); });
+
+  // Dismiss on Escape key
+  const onKey = e => { if (e.key === 'Escape') { hideWelcome(); document.removeEventListener('keydown', onKey, true); } };
+  document.addEventListener('keydown', onKey, true);
 }
 
 export function hideWelcome() {

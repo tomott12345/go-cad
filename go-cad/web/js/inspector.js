@@ -74,32 +74,40 @@ function num(v, dec = 4) {
 
 function buildPropertyRows(e) {
   const rows = [];
-  // Common props
+  // Common props — always editable
   rows.push(prop('Layer', e.layer ?? 0, 'layer', 'number'));
-  const colorVal = e.color && /^#/.test(e.color) ? e.color : null;
-  rows.push(prop('Color', e.color || 'BYLAYER', colorVal ? 'color' : null, 'color'));
+  // Color: always show as editable colour picker; default to #ffffff if not a hex value
+  const colorHex = (e.color && /^#[0-9a-fA-F]{6}$/.test(e.color)) ? e.color : '#ffffff';
+  rows.push(prop('Color', colorHex, 'color', 'color'));
 
   switch (e.type) {
     case 'line':
-      rows.push(prop('X1', num(e.x1)), prop('Y1', num(e.y1)));
-      rows.push(prop('X2', num(e.x2)), prop('Y2', num(e.y2)));
+      rows.push(prop('X1', num(e.x1), 'x1', 'number'));
+      rows.push(prop('Y1', num(e.y1), 'y1', 'number'));
+      rows.push(prop('X2', num(e.x2), 'x2', 'number'));
+      rows.push(prop('Y2', num(e.y2), 'y2', 'number'));
       rows.push(prop('Length', num(Math.hypot(e.x2 - e.x1, e.y2 - e.y1))));
       rows.push(prop('Angle°', num(Math.atan2(e.y2 - e.y1, e.x2 - e.x1) * 180 / Math.PI, 2)));
       break;
     case 'circle':
-      rows.push(prop('CX', num(e.cx)), prop('CY', num(e.cy)));
-      rows.push(prop('Radius', num(e.r)));
+      rows.push(prop('CX', num(e.cx), 'cx', 'number'));
+      rows.push(prop('CY', num(e.cy), 'cy', 'number'));
+      rows.push(prop('Radius', num(e.r), 'r', 'number'));
       rows.push(prop('Diameter', num(e.r * 2)));
       rows.push(prop('Area', num(Math.PI * e.r * e.r)));
       break;
     case 'arc':
-      rows.push(prop('CX', num(e.cx)), prop('CY', num(e.cy)));
-      rows.push(prop('Radius', num(e.r)));
-      rows.push(prop('Start°', num(e.startDeg, 2)), prop('End°', num(e.endDeg, 2)));
+      rows.push(prop('CX', num(e.cx), 'cx', 'number'));
+      rows.push(prop('CY', num(e.cy), 'cy', 'number'));
+      rows.push(prop('Radius', num(e.r), 'r', 'number'));
+      rows.push(prop('Start°', num(e.startDeg, 2), 'startDeg', 'number'));
+      rows.push(prop('End°', num(e.endDeg, 2), 'endDeg', 'number'));
       break;
     case 'rectangle':
-      rows.push(prop('X1', num(e.x1)), prop('Y1', num(e.y1)));
-      rows.push(prop('X2', num(e.x2)), prop('Y2', num(e.y2)));
+      rows.push(prop('X1', num(e.x1), 'x1', 'number'));
+      rows.push(prop('Y1', num(e.y1), 'y1', 'number'));
+      rows.push(prop('X2', num(e.x2), 'x2', 'number'));
+      rows.push(prop('Y2', num(e.y2), 'y2', 'number'));
       rows.push(prop('Width', num(Math.abs(e.x2 - e.x1))));
       rows.push(prop('Height', num(Math.abs(e.y2 - e.y1))));
       rows.push(prop('Area', num(Math.abs((e.x2 - e.x1) * (e.y2 - e.y1)))));
@@ -107,14 +115,16 @@ function buildPropertyRows(e) {
     case 'text':
     case 'mtext':
       rows.push(prop('Text', e.text || '', 'text'));
+      rows.push(prop('X', num(e.x1), 'x1', 'number'));
+      rows.push(prop('Y', num(e.y1), 'y1', 'number'));
       rows.push(prop('Height', num(e.textHeight, 3), 'textHeight', 'number'));
       rows.push(prop('Rotation°', num(e.rotDeg, 2), 'rotDeg', 'number'));
-      rows.push(prop('X', num(e.x1)), prop('Y', num(e.y1)));
       if (e.font) rows.push(prop('Font', e.font));
       break;
     case 'ellipse':
-      rows.push(prop('CX', num(e.cx)), prop('CY', num(e.cy)));
-      rows.push(prop('Semi-major', num(e.r)));
+      rows.push(prop('CX', num(e.cx), 'cx', 'number'));
+      rows.push(prop('CY', num(e.cy), 'cy', 'number'));
+      rows.push(prop('Semi-major', num(e.r), 'r', 'number'));
       rows.push(prop('Semi-minor', num(e.r2)));
       rows.push(prop('Rotation°', num(e.rotDeg, 2), 'rotDeg', 'number'));
       break;
@@ -126,7 +136,8 @@ function buildPropertyRows(e) {
       break;
     case 'blockref':
       rows.push(prop('Block Name', e.text || ''));
-      rows.push(prop('X', num(e.x1)), prop('Y', num(e.y1)));
+      rows.push(prop('X', num(e.x1), 'x1', 'number'));
+      rows.push(prop('Y', num(e.y1), 'y1', 'number'));
       rows.push(prop('ScaleX', num(e.r, 3)), prop('ScaleY', num(e.r2, 3)));
       rows.push(prop('Rotation°', num(e.rotDeg, 2), 'rotDeg', 'number'));
       break;
@@ -140,19 +151,23 @@ function buildPropertyRows(e) {
       break;
     case 'dimlin':
     case 'dimali':
-      rows.push(prop('X1', num(e.x1)), prop('Y1', num(e.y1)));
-      rows.push(prop('X2', num(e.x2)), prop('Y2', num(e.y2)));
+      rows.push(prop('X1', num(e.x1), 'x1', 'number'));
+      rows.push(prop('Y1', num(e.y1), 'y1', 'number'));
+      rows.push(prop('X2', num(e.x2), 'x2', 'number'));
+      rows.push(prop('Y2', num(e.y2), 'y2', 'number'));
       rows.push(prop('Offset', num(e.cx, 2)));
       rows.push(prop('Measure', num(Math.hypot(e.x2 - e.x1, e.y2 - e.y1))));
       break;
     case 'dimang':
-      rows.push(prop('Vertex CX', num(e.cx)), prop('Vertex CY', num(e.cy)));
-      rows.push(prop('Radius', num(e.r)));
+      rows.push(prop('Vertex CX', num(e.cx), 'cx', 'number'));
+      rows.push(prop('Vertex CY', num(e.cy), 'cy', 'number'));
+      rows.push(prop('Radius', num(e.r), 'r', 'number'));
       break;
     case 'dimrad':
     case 'dimdia':
-      rows.push(prop('CX', num(e.cx)), prop('CY', num(e.cy)));
-      rows.push(prop('Radius', num(e.r)));
+      rows.push(prop('CX', num(e.cx), 'cx', 'number'));
+      rows.push(prop('CY', num(e.cy), 'cy', 'number'));
+      rows.push(prop('Radius', num(e.r), 'r', 'number'));
       break;
     default:
       if (e.points) rows.push(prop('Points', (e.points || []).length));

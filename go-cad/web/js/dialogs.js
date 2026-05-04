@@ -76,12 +76,31 @@ export function refreshLayerTable() {
     if (state.wasmReady) window.cadSetLayerFrozen(parseInt(el.dataset.lid), el.checked);
     render();
   }));
+  tbody.querySelectorAll('.layer-name-inp').forEach(el => el.addEventListener('change', () => {
+    if (state.wasmReady) window.cadSetLayerName(parseInt(el.dataset.lid), el.value);
+  }));
+  tbody.querySelectorAll('.layer-lw-inp').forEach(el => el.addEventListener('change', () => {
+    if (state.wasmReady) window.cadSetLayerLineWeight(parseInt(el.dataset.lid), parseFloat(el.value));
+  }));
+  tbody.querySelectorAll('.layer-prt').forEach(el => el.addEventListener('change', () => {
+    if (state.wasmReady) window.cadSetLayerPrint(parseInt(el.dataset.lid), el.checked);
+  }));
   tbody.querySelectorAll('.layer-del').forEach(el => el.addEventListener('click', () => {
     const id = parseInt(el.dataset.lid);
     if (id === 0) return;
-    if (!confirm(`Delete layer ${id}?`)) return;
-    // No cadDeleteLayer yet — show notice
-    setStatus('Layer deletion not yet supported in this build.');
+    if (!confirm(`Delete layer ${id}? Entities on this layer will be moved to layer 0.`)) return;
+    if (state.wasmReady && window.cadRemoveLayer) {
+      const ok = window.cadRemoveLayer(id);
+      if (ok) {
+        if (state.currentLayer === id) state.currentLayer = 0;
+        refreshLayerTable();
+        refreshLayerSel();
+        render();
+        setStatus(`Layer ${id} deleted.`);
+      } else {
+        setStatus(`Could not delete layer ${id}.`);
+      }
+    }
   }));
 }
 
