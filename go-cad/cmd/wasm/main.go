@@ -452,6 +452,19 @@ func main() {
                 return string(b)
         }))
 
+        // cadOffset(ids, dist) → JSON [id, …]
+        // Creates parallel copies of entities at signed distance dist
+        // (positive = left/outward; negative = right/inward). All ids are
+        // handled as a single atomic undo step.
+        // Command: OFFSET / O
+        js.Global().Set("cadOffset", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 2 {
+                        return "[]"
+                }
+                b, _ := json.Marshal(doc.Offset(jsArrToInts(a[0]), a[1].Float()))
+                return string(b)
+        }))
+
         select {} // block so the Go runtime stays alive
 }
 

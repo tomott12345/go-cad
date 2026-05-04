@@ -72,6 +72,7 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
   <button id="tool-chamfer"    title="Chamfer (CHA) — select two lines, type: CHAMFER d1 d2">Chamfer</button>
   <button id="tool-arrayrect"  title="Rect Array (AR) — select entity, type: ARRAYRECT rows cols dy dx">ArrayRect</button>
   <button id="tool-arraypolar" title="Polar Array (AP) — select entity, type: ARRAYPOLAR count angle [cx cy]">ArrayPolar</button>
+  <button id="tool-offset"     title="Offset (O) — select entity, type: OFFSET dist  (e.g. OFFSET 5 or OFFSET -3)">Offset</button>
 
   <div class="sep"></div>
 
@@ -160,6 +161,7 @@ function installDemoStubs() {
   window.cadChamfer     = () => -1;
   window.cadArrayRect   = (ids,rows,cols,rs,cs) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){if(r===0&&c===0)continue;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){ne.x1+=c*cs;ne.y1+=r*rs;}if(ne.x2!=null){ne.x2+=c*cs;ne.y2+=r*rs;}if(ne.cx!=null){ne.cx+=c*cs;ne.cy+=r*rs;}if(ne.points)ne.points=ne.points.map(p=>[p[0]+c*cs,p[1]+r*rs]);ents.push(ne);out.push(ne.id);}}); return out; };
   window.cadArrayPolar  = (ids,cx,cy,count,ang) => { const out=[],step=ang/count; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;for(let i=1;i<count;i++){const r=i*step*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r);const rot=(x,y)=>[cx+(x-cx)*cs-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*cs];const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(ne.x1!=null){[ne.x1,ne.y1]=rot(ne.x1,ne.y1);}if(ne.x2!=null){[ne.x2,ne.y2]=rot(ne.x2,ne.y2);}if(ne.cx!=null){[ne.cx,ne.cy]=rot(ne.cx,ne.cy);}if(ne.points)ne.points=ne.points.map(p=>rot(p[0],p[1]));ents.push(ne);out.push(ne.id);}}); return out; };
+  window.cadOffset      = (ids,dist) => { const out=[]; ids.forEach(id=>{const e=ents.find(e=>e.id===id);if(!e)return;const ne=JSON.parse(JSON.stringify(e));ne.id=nextId++;if(e.type==='line'){const dx=e.x2-e.x1,dy=e.y2-e.y1,len=Math.hypot(dx,dy)||1;const px=-dy/len*dist,py=dx/len*dist;ne.x1+=px;ne.y1+=py;ne.x2+=px;ne.y2+=py;}else if(e.type==='circle'||e.type==='arc'){ne.r=Math.max(0,(e.r||0)+dist);}else{ne.x1=(e.x1||0)+dist;ne.y1=(e.y1||0)+dist;}ents.push(ne);out.push(ne.id);}); return out; };
   wasmReady = true;
 }
 
@@ -203,6 +205,7 @@ const toolClicks = {
   extend:2,      // click boundary entity, click near end to extend
   fillet:-99, chamfer:-99,
   arrayrect:-99, arraypolar:-99,
+  offset:-99,    // select entity, type OFFSET dist in command bar
 };
 
 const toolHints = {
@@ -233,6 +236,7 @@ const toolHints = {
   chamfer:    'Select first line, then type: CHAMFER d1 d2  (e.g. CHAMFER 3 3) — then click second line.',
   arrayrect:  'Select entity, then type: ARRAYRECT rows cols rowSpacing colSpacing',
   arraypolar: 'Select entity, then type: ARRAYPOLAR count totalAngleDeg [cx cy]',
+  offset:     'Select entity, then type: OFFSET dist  (positive = outward/left; negative = inward/right)',
 };
 
 function setTool(name){
@@ -474,11 +478,20 @@ cmdInput.addEventListener('keydown', e=>{
     CHAMFER:'chamfer',CHA:'chamfer',
     ARRAYRECT:'arrayrect',AR:'arrayrect',
     ARRAYPOLAR:'arraypolar',AP:'arraypolar',
+    OFFSET:'offset',O:'offset',
   };
 
   // ── Handle parametric edit commands (MOVE dx dy, ROTATE angle, etc.) ─────
+  // Normalize short aliases so "M 10 5" works identically to "MOVE 10 5".
   const parts = raw.trim().split(/\s+/);
-  const verb  = parts[0].toUpperCase();
+  const rawVerb = parts[0].toUpperCase();
+  // Map short alias → full upper-case verb (e.g. 'M'→'MOVE', 'CP'→'COPY').
+  const verbAliases = {
+    M:'MOVE', CP:'COPY', CO:'COPY', RO:'ROTATE', SC:'SCALE',
+    MI:'MIRROR', TR:'TRIM', EX:'EXTEND', F:'FILLET', CHA:'CHAMFER',
+    AR:'ARRAYRECT', AP:'ARRAYPOLAR', O:'OFFSET',
+  };
+  const verb = verbAliases[rawVerb] || rawVerb;
 
   if(wasmReady && selectedId && verb==='MOVE' && parts.length>=3){
     const dx=parseFloat(parts[1]),dy=parseFloat(parts[2]);
@@ -492,15 +505,26 @@ cmdInput.addEventListener('keydown', e=>{
   }
   if(wasmReady && selectedId && verb==='ROTATE' && parts.length>=2){
     const ang=parseFloat(parts[1]);
+    // ROTATE angle [cx cy]
     const cx=parts.length>=4?parseFloat(parts[2]):0;
     const cy=parts.length>=4?parseFloat(parts[3]):0;
     window.cadRotate([selectedId],cx,cy,ang,false); render(); return;
   }
   if(wasmReady && selectedId && verb==='SCALE' && parts.length>=2){
+    // Supported forms (uniform preferred in hints):
+    //   SCALE factor            → uniform, base at origin
+    //   SCALE factor cx cy      → uniform, base at (cx,cy)
+    //   SCALE sx sy             → non-uniform, base at origin
+    //   SCALE sx sy cx cy       → non-uniform, base at (cx,cy)
     const sx=parseFloat(parts[1]);
-    const sy=parts.length>=3?parseFloat(parts[2]):sx;
-    const cx=parts.length>=5?parseFloat(parts[3]):0;
-    const cy=parts.length>=5?parseFloat(parts[4]):0;
+    let sy=sx, cx=0, cy=0;
+    if(parts.length===4){        // SCALE factor cx cy (uniform with base)
+      cx=parseFloat(parts[2]); cy=parseFloat(parts[3]);
+    } else if(parts.length===3){ // SCALE sx sy (non-uniform, no base)
+      sy=parseFloat(parts[2]);
+    } else if(parts.length>=5){  // SCALE sx sy cx cy
+      sy=parseFloat(parts[2]); cx=parseFloat(parts[3]); cy=parseFloat(parts[4]);
+    }
     window.cadScale([selectedId],cx,cy,sx,sy,false); render(); return;
   }
   if(wasmReady && (currentTool==='fillet') && editPickIds.length===1 && verb==='FILLET' && parts.length>=2){
@@ -538,6 +562,13 @@ cmdInput.addEventListener('keydown', e=>{
     JSON.parse(window.cadArrayPolar([selectedId],cx,cy,count,ang)||'[]');
     render(); return;
   }
+  if(wasmReady && selectedId && verb==='OFFSET' && parts.length>=2){
+    const dist=parseFloat(parts[1]);
+    const newIDs=JSON.parse(window.cadOffset([selectedId],dist)||'[]');
+    if(newIDs.length>0) setStatus(`Offset OK: ${newIDs.length} new entity(ies).`);
+    else setStatus('Offset: failed (entity type may not support offset).');
+    render(); return;
+  }
 
   const action=toolMap[cmd];
   if(!action){setStatus(`Unknown command: ${raw}`);return;}
@@ -555,7 +586,7 @@ cmdInput.addEventListener('keydown', e=>{
 // ─── Toolbar buttons ──────────────────────────────────────────────────────────
 ['line','circle','arc','rect','poly','spline','nurbs','ellipse','text','mtext',
  'dimlin','dimali','dimang','dimrad','dimdia',
- 'move','copy','rotate','scale','mirror','trim','extend','fillet','chamfer','arrayrect','arraypolar',
+ 'move','copy','rotate','scale','mirror','trim','extend','fillet','chamfer','arrayrect','arraypolar','offset',
 ].forEach(t=>{
   document.getElementById('tool-'+t).addEventListener('click',()=>setTool(t));
 });
