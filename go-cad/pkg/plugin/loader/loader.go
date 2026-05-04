@@ -236,6 +236,9 @@ func (sp *SubprocessPlugin) Register(api plugin.HostAPI) error {
 func (sp *SubprocessPlugin) Unregister() error {
         _, _ = sp.call("plugin.unregister", nil)
         _ = sp.stdin.Close()
+        if sp.cmd == nil {
+                return nil // created from pipes in tests; no OS process to reap
+        }
         return sp.cmd.Wait()
 }
 

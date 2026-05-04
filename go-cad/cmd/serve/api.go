@@ -156,7 +156,7 @@ func (h *apiHandler) postSave(w http.ResponseWriter, r *http.Request) {
         if body.Path == "" {
                 body.Path = "go-cad-document.json"
         }
-        if err := h.doc.Save(body.Path); err != nil {
+        if err := h.host.SaveDocument(body.Path); err != nil {
                 writeError(w, http.StatusInternalServerError, err.Error())
                 return
         }
@@ -176,7 +176,7 @@ func (h *apiHandler) postLoad(w http.ResponseWriter, r *http.Request) {
                 writeError(w, http.StatusBadRequest, "path is required")
                 return
         }
-        if err := h.doc.Load(body.Path); err != nil {
+        if err := h.host.LoadDocument(body.Path); err != nil {
                 writeError(w, http.StatusUnprocessableEntity, err.Error())
                 return
         }
