@@ -11,16 +11,23 @@ import (
         "syscall/js"
 
         "go-cad/internal/document"
+        "go-cad/internal/hatch"
         "go-cad/internal/snap"
+        "go-cad/internal/symbols"
         "go-cad/pkg/dxf"
         "go-cad/pkg/svg"
 )
+
+// symNames is cached at startup so the JS cadGetSymbols call never re-allocates.
+var symNames = symbols.Names()
 
 func init() {
         // Wire the DXF reader into the document package (breaks import cycle).
         document.RegisterDXFReader(func(data []byte) (*document.Document, []string, error) {
                 return dxf.Read(strings.NewReader(string(data)))
         })
+        // Register built-in symbols as block definitions so cadInsertSymbol works.
+        symbols.Register(doc)
 }
 
 var doc = document.New()
@@ -656,6 +663,159 @@ func main() {
                         return false
                 }
                 return doc.SetCurrentLayer(a[0].Int())
+        }))
+
+        // ── Task #7: Blocks, Hatching & Annotations ──────────────────────────────
+
+        // cadDefineBlock(name, baseX, baseY, entityIDsJSON) → bool
+        // Creates or replaces a named block using the listed entity IDs.
+        // entityIDsJSON: JSON array of entity ID integers, e.g. "[1,2,3]"
+        js.Global().Set("cadDefineBlock", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 4 {
+                        return false
+                }
+                name := a[0].String()
+                baseX, baseY := a[1].Float(), a[2].Float()
+                var ids []int
+                if err := json.Unmarshal([]byte(a[3].String()), &ids); err != nil {
+                        return false
+                }
+                return doc.DefineBlock(name, baseX, baseY, ids)
+        }))
+
+        // cadInsertBlock(name, x, y, scaleX, scaleY, rotDeg, layer, color) → entity ID
+        // Inserts a block reference at (x,y) with given scale and rotation.
+        js.Global().Set("cadInsertBlock", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 8 {
+                        return -1
+                }
+                return doc.InsertBlock(
+                        a[0].String(),
+                        a[1].Float(), a[2].Float(),
+                        a[3].Float(), a[4].Float(),
+                        a[5].Float(),
+                        a[6].Int(), a[7].String())
+        }))
+
+        // cadExplodeBlock(id) → JSON [id, …] of new entities, or "null"
+        js.Global().Set("cadExplodeBlock", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 1 {
+                        return "null"
+                }
+                ids := doc.ExplodeBlock(a[0].Int())
+                if ids == nil {
+                        return "null"
+                }
+                b, _ := json.Marshal(ids)
+                return string(b)
+        }))
+
+        // cadGetBlocks() → JSON [{name,baseX,baseY,count}, …]
+        js.Global().Set("cadGetBlocks", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+                type blockInfo struct {
+                        Name  string  `json:"name"`
+                        BaseX float64 `json:"baseX"`
+                        BaseY float64 `json:"baseY"`
+                        Count int     `json:"count"`
+                }
+                blocks := doc.Blocks()
+                out := make([]blockInfo, len(blocks))
+                for i, b := range blocks {
+                        out[i] = blockInfo{Name: b.Name, BaseX: b.BaseX, BaseY: b.BaseY, Count: len(b.Entities)}
+                }
+                byt, _ := json.Marshal(out)
+                return string(byt)
+        }))
+
+        // cadAddHatch(boundaryPtsJSON, pattern, angleDeg, scale, layer, color) → entity ID
+        // boundaryPtsJSON: JSON array [[x,y],…]  pattern: "SOLID"|"ANSI31"|"ANSI32"|"DOTS"
+        js.Global().Set("cadAddHatch", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 6 {
+                        return -1
+                }
+                pts := jsArrToPoints(a[0])
+                return doc.AddHatch(pts, a[1].String(), a[2].Float(), a[3].Float(),
+                        a[4].Int(), a[5].String())
+        }))
+
+        // cadRenderHatch(id) → JSON [[x1,y1,x2,y2], …] hatch line segments, or "[]"
+        // Computes hatch fill segments from the stored entity (for canvas rendering).
+        js.Global().Set("cadRenderHatch", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 1 {
+                        return "[]"
+                }
+                entities := doc.Entities()
+                var e *document.Entity
+                for i := range entities {
+                        if entities[i].ID == a[0].Int() && entities[i].Type == document.TypeHatch {
+                                e = &entities[i]
+                                break
+                        }
+                }
+                if e == nil {
+                        return "[]"
+                }
+                segs := hatch.GenerateLines(e.Points, e.Text, e.RotDeg, e.R)
+                type seg4 [4]float64
+                out := make([]seg4, len(segs))
+                for i, s := range segs {
+                        out[i] = seg4(s)
+                }
+                b, _ := json.Marshal(out)
+                return string(b)
+        }))
+
+        // cadAddLeader(ptsJSON, text, layer, color) → entity ID
+        // ptsJSON: JSON array [[x,y],…] — first point = arrowhead tip
+        js.Global().Set("cadAddLeader", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 4 {
+                        return -1
+                }
+                pts := jsArrToPoints(a[0])
+                return doc.AddLeader(pts, a[1].String(), a[2].Int(), a[3].String())
+        }))
+
+        // cadAddRevisionCloud(ptsJSON, arcLength, layer, color) → entity ID
+        // ptsJSON: JSON array [[x,y],…] polygon vertices
+        js.Global().Set("cadAddRevisionCloud", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 4 {
+                        return -1
+                }
+                pts := jsArrToPoints(a[0])
+                return doc.AddRevisionCloud(pts, a[1].Float(), a[2].Int(), a[3].String())
+        }))
+
+        // cadAddWipeout(ptsJSON, layer, color) → entity ID
+        js.Global().Set("cadAddWipeout", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 3 {
+                        return -1
+                }
+                pts := jsArrToPoints(a[0])
+                return doc.AddWipeout(pts, a[1].Int(), a[2].String())
+        }))
+
+        // cadGetSymbols() → JSON ["CENTER_MARK", "NORTH_ARROW", …]
+        js.Global().Set("cadGetSymbols", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+                b, _ := json.Marshal(symNames)
+                return string(b)
+        }))
+
+        // cadInsertSymbol(name, x, y, scale, rotDeg, layer, color) → entity ID
+        // Inserts a built-in symbol block reference (auto-defines if not already present).
+        js.Global().Set("cadInsertSymbol", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 7 {
+                        return -1
+                }
+                name := a[0].String()
+                if doc.BlockByName(name) == nil {
+                        return -1 // not registered
+                }
+                sc := a[3].Float()
+                if sc == 0 {
+                        sc = 1
+                }
+                return doc.InsertBlock(name, a[1].Float(), a[2].Float(), sc, sc, a[4].Float(),
+                        a[5].Int(), a[6].String())
         }))
 
         select {} // block so the Go runtime stays alive

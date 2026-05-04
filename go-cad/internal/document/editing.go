@@ -92,6 +92,19 @@ func applyXfm(e Entity, xfm xfmFn, radScale float64) Entity {
         case TypeDimRadial, TypeDimDiameter:
                 e.CX, e.CY = xfm(e.CX, e.CY)
                 e.R *= radScale
+        case TypeBlockRef:
+                // Transform insertion point; scale factors and rotation are
+                // not modified here (they belong to the block's own coordinate
+                // system). Only the origin translates.
+                e.X1, e.Y1 = xfm(e.X1, e.Y1)
+                e.R *= radScale  // scaleX
+                e.R2 *= radScale // scaleY
+        case TypeHatch, TypeLeader, TypeRevisionCloud, TypeWipeout:
+                // Points slice is already transformed by the loop above.
+                // Hatch scale (R) tracks radScale so spacing stays proportional.
+                if e.Type == TypeHatch || e.Type == TypeRevisionCloud {
+                        e.R *= radScale
+                }
         }
         return e
 }

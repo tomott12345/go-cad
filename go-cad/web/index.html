@@ -17,6 +17,42 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 #layer-sel,#export-fmt{background:#3a3a3a;border:1px solid #555;border-radius:4px;color:#ccc;font-size:12px;padding:3px 6px}
 #color-inp{width:36px;height:26px;border:1px solid #555;border-radius:4px;padding:2px;cursor:pointer;background:transparent}
 
+/* ── Block Manager Modal (Task #7) ──────────────────────────────────────── */
+#block-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
+#block-modal.open{display:flex}
+#block-panel{background:#252525;border:1px solid #555;border-radius:6px;width:520px;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+#block-panel h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd;display:flex;justify-content:space-between;align-items:center}
+#block-list{overflow-y:auto;flex:1;padding:8px}
+.block-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #333;font-size:12px;color:#ccc}
+.block-item:hover{background:#2a2a2a}
+.block-name{flex:1;font-weight:600;color:#ddd}
+.block-meta{color:#888;font-size:11px;flex:0 0 120px}
+.block-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
+.block-insert-btn:hover{background:#0078d4;border-color:#0060a8;color:#fff}
+#block-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
+#block-panel-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px}
+#block-panel-footer button:hover{background:#505050}
+
+/* ── Symbols Modal (Task #7) ─────────────────────────────────────────────── */
+#sym-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
+#sym-modal.open{display:flex}
+#sym-panel{background:#252525;border:1px solid #555;border-radius:6px;width:420px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+#sym-panel h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd}
+#sym-list{overflow-y:auto;flex:1;padding:8px}
+.sym-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #333;font-size:12px;cursor:pointer;color:#ccc}
+.sym-item:hover{background:#2a2a2a;color:#fff}
+.sym-item span{flex:1}
+.sym-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
+.sym-insert-btn:hover{background:#0078d4;border-color:#0060a8;color:#fff}
+#sym-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
+#sym-panel-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:#3a3a3a;color:#ccc;cursor:pointer;font-size:12px}
+
+/* ── Hatch pattern picker (Task #7) ─────────────────────────────────────── */
+#hatch-bar{display:none;align-items:center;gap:6px;padding:4px 10px;background:#2a2a2a;border-top:1px solid #333;font-size:11px;color:#aaa}
+#hatch-bar.open{display:flex}
+#hatch-bar select,#hatch-bar input[type=number]{background:#1a1a1a;border:1px solid #444;border-radius:3px;color:#ccc;font-size:11px;padding:2px 5px}
+#hatch-bar input[type=number]{width:55px}
+
 /* ── Layer Manager Modal ─────────────────────────────────────────────────── */
 #layer-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center}
 #layer-modal.open{display:flex}
@@ -117,6 +153,16 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 
   <div class="sep"></div>
 
+  <!-- Task #7: Blocks, Hatching & Annotations -->
+  <button id="tool-hatch"    title="Hatch fill (H) — click polygon vertices, Enter to finish">Hatch</button>
+  <button id="tool-leader"   title="Leader annotation (LD) — click vertices, Enter to finish">Leader</button>
+  <button id="tool-revcloud" title="Revision Cloud (RC) — click polygon vertices, Enter to finish">RevCloud</button>
+  <button id="tool-wipeout"  title="Wipeout mask (WP) — click polygon vertices, Enter to finish">Wipeout</button>
+  <button id="btn-blocks"    title="Block Manager…">Blocks…</button>
+  <button id="btn-symbols"   title="Insert Symbol…">Symbols…</button>
+
+  <div class="sep"></div>
+
   <!-- File ops (Task #6) -->
   <button id="btn-open"    title="Open DXF file (Ctrl+O)">Open…</button>
   <input id="file-input" type="file" accept=".dxf" style="display:none">
@@ -166,6 +212,45 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
     <option value="r12">DXF R12</option>
     <option value="svg">SVG</option>
   </select>
+</div>
+
+<!-- ── Block Manager Modal (Task #7) ─────────────────────────────────────── -->
+<div id="block-modal">
+  <div id="block-panel">
+    <h3>Block Manager
+      <button id="btn-close-blocks">✕</button>
+    </h3>
+    <div id="block-list"></div>
+    <div id="block-panel-footer">
+      <button id="btn-close-blocks2">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Symbols Modal (Task #7) ───────────────────────────────────────────── -->
+<div id="sym-modal">
+  <div id="sym-panel">
+    <h3>Insert Symbol</h3>
+    <div id="sym-list"></div>
+    <div id="sym-panel-footer">
+      <button id="btn-close-sym">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Hatch options bar (Task #7) ───────────────────────────────────────── -->
+<div id="hatch-bar">
+  <label>Pattern:</label>
+  <select id="hatch-pattern">
+    <option value="SOLID">SOLID</option>
+    <option value="ANSI31" selected>ANSI31 (45°)</option>
+    <option value="ANSI32">ANSI32 (cross)</option>
+    <option value="DOTS">DOTS</option>
+  </select>
+  <label>Angle:</label>
+  <input type="number" id="hatch-angle" value="0" min="-360" max="360" step="5" style="width:50px">°
+  <label>Scale:</label>
+  <input type="number" id="hatch-scale" value="5" min="0.1" max="200" step="0.5" style="width:55px">
 </div>
 
 <!-- ── Layer Manager Modal (Task #5) ─────────────────────────────────────── -->
@@ -280,6 +365,23 @@ function installDemoStubs() {
   window.cadSetLayerLineType  = (id,lt) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineType=lt; return !!l; };
   window.cadSetLayerLineWeight= (id,lw) => { const l=_stubLayers.find(l=>l.id===id); if(l)l.lineWeight=lw; return !!l; };
   window.cadSetLayerPrint     = (id,v)  => { const l=_stubLayers.find(l=>l.id===id); if(l)l.printEnabled=v; return !!l; };
+  // ── Task #7 stubs ────────────────────────────────────────────────────────────
+  const _stubBlocks = {};
+  window.cadDefineBlock    = (name,bx,by,idsJson) => { _stubBlocks[name]={name,baseX:bx,baseY:by,count:JSON.parse(idsJson||'[]').length}; return true; };
+  window.cadInsertBlock    = (name,x,y,sx,sy,rot,l,c) => { if(!_stubBlocks[name])return -1; return mk({type:'blockref',x1:x,y1:y,text:name,r:sx,r2:sy,rotDeg:rot,layer:l,color:c}); };
+  window.cadExplodeBlock   = (id) => { const e=ents.find(e=>e.id===id); if(!e||e.type!=='blockref')return null; ents.splice(ents.findIndex(e2=>e2.id===id),1); return [mk({...e,type:'line',x2:e.x1+10,y2:e.y1})]; };
+  window.cadGetBlocks      = () => JSON.stringify(Object.values(_stubBlocks));
+  window.cadAddHatch       = (pts,pat,ang,sc,l,c) => mk({type:'hatch',points:pts,text:pat,rotDeg:ang,r:sc,layer:l,color:c});
+  window.cadRenderHatch    = (id) => '[]';
+  window.cadAddLeader      = (pts,text,l,c) => mk({type:'leader',points:pts,text,layer:l,color:c});
+  window.cadAddRevisionCloud=(pts,arcLen,l,c)=> mk({type:'revcloud',points:pts,r:arcLen,layer:l,color:c});
+  window.cadAddWipeout     = (pts,l,c)        => mk({type:'wipeout',points:pts,layer:l,color:c});
+  window.cadGetSymbols     = () => JSON.stringify(['CENTER_MARK','NORTH_ARROW','REVISION_TRIANGLE','DATUM_TRIANGLE','SURFACE_FINISH']);
+  window.cadInsertSymbol   = (name,x,y,sc,rot,l,c) => {
+    window.cadDefineBlock(name,0,0,'[]');
+    return window.cadInsertBlock(name,x,y,sc,sc,rot,l,c);
+  };
+
   // ── Task #6 stubs ────────────────────────────────────────────────────────────
   window.cadLoadDXF = (dxfStr) => {
     try {
@@ -580,6 +682,11 @@ const toolClicks = {
   fillet:-99, chamfer:-99,
   arrayrect:-99, arraypolar:-99,
   offset:-99,    // select entity, type OFFSET dist in command bar
+  // Task #7 tools
+  hatch:-1,      // polygon click-points, Enter to finish
+  leader:-1,     // polyline click-points, Enter to finish
+  revcloud:-1,   // polygon click-points, Enter to finish
+  wipeout:-1,    // polygon click-points, Enter to finish
 };
 
 const toolHints = {
@@ -611,6 +718,11 @@ const toolHints = {
   arrayrect:  'Select entity, then type: ARRAYRECT rows cols rowSpacing colSpacing',
   arraypolar: 'Select entity, then type: ARRAYPOLAR count totalAngleDeg [cx cy]',
   offset:     'Select entity, then type: OFFSET dist  (positive = outward/left; negative = inward/right)',
+  // ── Task #7 ─────────────────────────────────────────────────────────────────
+  hatch:    'Click polygon boundary vertices. Enter / right-click to finish & fill. Choose pattern/angle/scale above.',
+  leader:   'Click arrow-tip first, then elbow/label points. Enter / right-click to finish. Type label in command bar.',
+  revcloud: 'Click polygon vertices for revision cloud boundary. Enter / right-click to finish.',
+  wipeout:  'Click polygon vertices for wipeout mask. Enter / right-click to finish.',
 };
 
 function setTool(name){
@@ -618,6 +730,9 @@ function setTool(name){
   document.querySelectorAll('#toolbar button[id^="tool-"]').forEach(b=>{
     b.classList.toggle('active', b.id==='tool-'+name);
   });
+  // Show hatch options bar only for the hatch tool (Task #7)
+  const hatchBar=document.getElementById('hatch-bar');
+  if(hatchBar) hatchBar.classList.toggle('open', name==='hatch');
   setStatus(toolHints[name]||name);
 }
 
@@ -679,6 +794,26 @@ function commitEntity(){
       const ang=Math.atan2(c[1][1]-c[0][1],c[1][0]-c[0][0])*180/Math.PI;
       window.cadAddDiameterDim(c[0][0],c[0][1],dist(c[0],c[1]),ang,layer,color); break;
     }
+    // ── Task #7 ───────────────────────────────────────────────────────────────
+    case 'hatch':
+      if(c.length>=3&&wasmReady){
+        const pat  = (document.getElementById('hatch-pattern')||{value:'ANSI31'}).value;
+        const ang  = parseFloat((document.getElementById('hatch-angle')||{value:'0'}).value)||0;
+        const sc   = parseFloat((document.getElementById('hatch-scale')||{value:'5'}).value)||5;
+        window.cadAddHatch(c.map(p=>p.slice()),pat,ang,sc,layer,color);
+      } break;
+    case 'leader':
+      if(c.length>=2&&wasmReady){
+        const label=pendingText||'';
+        window.cadAddLeader(c.map(p=>p.slice()),label,layer,color);
+        pendingText=null;
+      } break;
+    case 'revcloud':
+      if(c.length>=3&&wasmReady)
+        window.cadAddRevisionCloud(c.map(p=>p.slice()),10,layer,color); break;
+    case 'wipeout':
+      if(c.length>=3&&wasmReady)
+        window.cadAddWipeout(c.map(p=>p.slice()),layer,color); break;
   }
   clicks=[];
   render();
@@ -691,7 +826,7 @@ canvas.addEventListener('mousedown', e=>{
     canvas.style.cursor='grabbing'; return;
   }
   if(e.button===2){
-    if(['poly','spline','nurbs'].includes(currentTool)) commitEntity();
+    if(['poly','spline','nurbs','hatch','leader','revcloud','wipeout'].includes(currentTool)) commitEntity();
     return;
   }
   if(!wasmReady) return;
@@ -789,7 +924,7 @@ canvas.addEventListener('mousedown', e=>{
 });
 
 canvas.addEventListener('dblclick', e=>{
-  if(['poly','spline','nurbs'].includes(currentTool)){
+  if(['poly','spline','nurbs','hatch','leader','revcloud','wipeout'].includes(currentTool)){
     if(clicks.length>0) clicks.pop();
     commitEntity();
   }
@@ -869,12 +1004,55 @@ cmdInput.addEventListener('keydown', e=>{
     ARRAYRECT:'arrayrect',AR:'arrayrect',
     ARRAYPOLAR:'arraypolar',AP:'arraypolar',
     OFFSET:'offset',O:'offset',
+    // ── Task #7 ───────────────────────────────────────────────────────────────
+    HATCH:'hatch',H:'hatch',
+    LEADER:'leader',LD:'leader',
+    REVCLOUD:'revcloud',RC:'revcloud',
+    WIPEOUT:'wipeout',WP:'wipeout',
   };
+
+  // Declare parts/rawVerb early so Task #7 and edit-op blocks can both use them.
+  const parts = raw.trim().split(/\s+/);
+  const rawVerb = parts[0].toUpperCase();
+
+  // ── Task #7 command: EXPLODE id ───────────────────────────────────────────
+  if(rawVerb==='EXPLODE'&&parts.length>=2&&wasmReady){
+    const eid=parseInt(parts[1]);
+    if(!isNaN(eid)){
+      const r=window.cadExplodeBlock(eid);
+      if(r&&r!=='null') setStatus(`Exploded block ${eid} → ${r}`);
+      else setStatus(`Entity ${eid} is not a block reference.`);
+      render();
+    }
+    cmdInput.value=''; return;
+  }
+  // ── Task #7 command: INSERT name x y [sx [sy [rot]]] ─────────────────────
+  if(rawVerb==='INSERT'&&parts.length>=4&&wasmReady){
+    const name=parts[1];
+    const x=parseFloat(parts[2]),y=parseFloat(parts[3]);
+    const sx=parts[4]?parseFloat(parts[4]):1;
+    const sy2=parts[5]?parseFloat(parts[5]):sx;
+    const rot=parts[6]?parseFloat(parts[6]):0;
+    const id=window.cadInsertBlock(name,x,y,sx,sy2,rot,currentLayer,currentColor);
+    if(id>=0) setStatus(`Inserted block "${name}" id=${id}`);
+    else setStatus(`Block "${name}" not found — use Blocks… to see available blocks.`);
+    render(); cmdInput.value=''; return;
+  }
+  // ── Task #7 command: BLOCKS ───────────────────────────────────────────────
+  if(rawVerb==='BLOCKS'&&wasmReady){
+    openBlockManager(); cmdInput.value=''; return;
+  }
+  // ── Task #7 command: SYMBOLS ──────────────────────────────────────────────
+  if(rawVerb==='SYMBOLS'&&wasmReady){
+    openSymbolsPanel(); cmdInput.value=''; return;
+  }
+  // ── Leader label captured from command bar ─────────────────────────────────
+  if(currentTool==='leader'&&clicks.length>=1&&rawVerb!=='' && !(rawVerb in toolMap)){
+    pendingText=raw; commitEntity(); cmdInput.value=''; return;
+  }
 
   // ── Handle parametric edit commands (MOVE dx dy, ROTATE angle, etc.) ─────
   // Normalize short aliases so "M 10 5" works identically to "MOVE 10 5".
-  const parts = raw.trim().split(/\s+/);
-  const rawVerb = parts[0].toUpperCase();
   // Map short alias → full upper-case verb (e.g. 'M'→'MOVE', 'CP'→'COPY').
   const verbAliases = {
     M:'MOVE', CP:'COPY', CO:'COPY', RO:'ROTATE', SC:'SCALE',
@@ -1030,6 +1208,88 @@ Object.keys(SNAP_BITS).forEach(id=>{
   if(el) el.addEventListener('change',saveSnapSettings);
 });
 
+// ─── Task #7: Block Manager ───────────────────────────────────────────────────
+function openBlockManager(){
+  if(!wasmReady){ setStatus('WASM not ready'); return; }
+  const blocks = JSON.parse(window.cadGetBlocks()||'[]');
+  const list = document.getElementById('block-list');
+  if(blocks.length===0){
+    list.innerHTML='<div style="padding:12px;color:#666;font-size:12px">(no blocks defined)</div>';
+  } else {
+    list.innerHTML = blocks.map(b=>`
+      <div class="block-item">
+        <span class="block-name">${escH(b.name)}</span>
+        <span class="block-meta">base=(${b.baseX.toFixed(1)},${b.baseY.toFixed(1)})  ${b.count} ent.</span>
+        <button class="block-insert-btn" onclick="promptInsertBlock(${JSON.stringify(b.name)})">Insert</button>
+      </div>`).join('');
+  }
+  document.getElementById('block-modal').classList.add('open');
+}
+function closeBlockManager(){
+  document.getElementById('block-modal').classList.remove('open');
+}
+function promptInsertBlock(name){
+  const xStr=prompt(`Insert block "${name}" — X:`, '0');
+  if(xStr===null) return;
+  const yStr=prompt('Y:', '0');
+  if(yStr===null) return;
+  const scStr=prompt('Scale (1=full size):', '1');
+  const x=parseFloat(xStr)||0, y=parseFloat(yStr)||0, sc=parseFloat(scStr)||1;
+  const id=window.cadInsertBlock(name,x,y,sc,sc,0,currentLayer,currentColor);
+  if(id>=0) setStatus(`Inserted block "${name}" id=${id}`);
+  else setStatus(`Failed to insert block "${name}"`);
+  closeBlockManager(); render();
+}
+
+document.getElementById('btn-blocks').addEventListener('click',openBlockManager);
+document.getElementById('btn-close-blocks').addEventListener('click',closeBlockManager);
+document.getElementById('btn-close-blocks2').addEventListener('click',closeBlockManager);
+document.getElementById('block-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('block-modal')) closeBlockManager();
+});
+
+// ─── Task #7: Symbols Panel ───────────────────────────────────────────────────
+function openSymbolsPanel(){
+  const names = wasmReady
+    ? JSON.parse(window.cadGetSymbols()||'[]')
+    : ['CENTER_MARK','NORTH_ARROW','REVISION_TRIANGLE','DATUM_TRIANGLE','SURFACE_FINISH'];
+  const list = document.getElementById('sym-list');
+  list.innerHTML = names.map(n=>`
+    <div class="sym-item">
+      <span>${escH(n)}</span>
+      <button class="sym-insert-btn" onclick="promptInsertSymbol(${JSON.stringify(n)})">Insert</button>
+    </div>`).join('');
+  document.getElementById('sym-modal').classList.add('open');
+}
+function closeSymbolsPanel(){
+  document.getElementById('sym-modal').classList.remove('open');
+}
+function promptInsertSymbol(name){
+  const xStr=prompt(`Insert symbol "${name}" — X:`, '0');
+  if(xStr===null) return;
+  const yStr=prompt('Y:', '0');
+  if(yStr===null) return;
+  const scStr=prompt('Scale:', '1');
+  const x=parseFloat(xStr)||0, y=parseFloat(yStr)||0, sc=parseFloat(scStr)||1;
+  if(!wasmReady){ setStatus('WASM not ready'); return; }
+  const id=window.cadInsertSymbol(name,x,y,sc,0,currentLayer,currentColor);
+  if(id>=0) setStatus(`Inserted symbol "${name}" id=${id}`);
+  else setStatus(`Failed to insert symbol "${name}" — may not be registered`);
+  closeSymbolsPanel(); render();
+}
+
+document.getElementById('btn-symbols').addEventListener('click',openSymbolsPanel);
+document.getElementById('btn-close-sym').addEventListener('click',closeSymbolsPanel);
+document.getElementById('sym-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('sym-modal')) closeSymbolsPanel();
+});
+
+// ─── Task #7: Hatch/annotation toolbar buttons ────────────────────────────────
+document.getElementById('tool-hatch').addEventListener('click',()=>setTool('hatch'));
+document.getElementById('tool-leader').addEventListener('click',()=>setTool('leader'));
+document.getElementById('tool-revcloud').addEventListener('click',()=>setTool('revcloud'));
+document.getElementById('tool-wipeout').addEventListener('click',()=>setTool('wipeout'));
+
 // Layer Manager (Task #5)
 document.getElementById('btn-layers').addEventListener('click',openLayerManager);
 document.getElementById('btn-close-layers').addEventListener('click',closeLayerManager);
@@ -1065,7 +1325,9 @@ document.addEventListener('keydown', e=>{
   if(map[e.key.toLowerCase()]){setTool(map[e.key.toLowerCase()]);return;}
   if(e.key==='Delete'&&wasmReady&&selectedId){tryDelete(selectedId);selectedId=0;render();}
   if(e.key==='Escape'){clicks=[];snapResult=null;drawSnapMarker();render();}
-  if(e.key==='Enter'&&['poly','spline','nurbs'].includes(currentTool)) commitEntity();
+  if(e.key==='Enter'&&['poly','spline','nurbs','hatch','revcloud','wipeout'].includes(currentTool)) commitEntity();
+  // Leader: Enter commits but first collects label if typed
+  if(e.key==='Enter'&&currentTool==='leader'&&clicks.length>=2) commitEntity();
 });
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -1098,6 +1360,9 @@ function entitySamplePoints(e){
     case 'ellipse': return[[e.cx+(e.r||0),e.cy],[e.cx-(e.r||0),e.cy],
                            [e.cx,e.cy+(e.r2||0)],[e.cx,e.cy-(e.r2||0)]];
     case 'text':case 'mtext': return[[e.x1,e.y1]];
+    case 'blockref': return[[e.x1,e.y1]];
+    case 'hatch':case 'revcloud':case 'wipeout': return(e.points||[]).map(p=>[p[0],p[1]]);
+    case 'leader': return(e.points||[]).map(p=>[p[0],p[1]]);
     default: return e.cx!=null?[[e.cx,e.cy]]:[[e.x1||0,e.y1||0],[e.x2||0,e.y2||0]];
   }
 }
@@ -1336,8 +1601,161 @@ function drawEntity(e,sel=false){
     case 'dimang': drawAngularDim(ctx,e,col); break;
     case 'dimrad': drawRadialDim(ctx,e,col,false); break;
     case 'dimdia': drawRadialDim(ctx,e,col,true); break;
+    // ── Task #7 types ──────────────────────────────────────────────────────────
+    case 'blockref':
+      drawBlockRef(ctx,e,col,sel); break;
+    case 'hatch':
+      drawHatch(ctx,e,col); break;
+    case 'leader':
+      drawLeader(ctx,e,col); break;
+    case 'revcloud':
+      drawRevCloud(ctx,e,col); break;
+    case 'wipeout':
+      drawWipeout(ctx,e,col); break;
   }
   ctx.restore();
+}
+
+// ── Task #7 entity renderers ──────────────────────────────────────────────────
+
+function drawBlockRef(c2, e, col, sel) {
+  // Render the block's constituent entities with the insertion transform applied.
+  // For the browser renderer we just draw a placeholder cross + bounding box.
+  const [sx, sy] = w2s(e.x1, e.y1);
+  const sz = 12;
+  c2.save();
+  c2.strokeStyle = sel ? '#ff9800' : col;
+  c2.lineWidth = sel ? 2 : 1;
+  c2.beginPath(); c2.moveTo(sx-sz,sy); c2.lineTo(sx+sz,sy); c2.stroke();
+  c2.beginPath(); c2.moveTo(sx,sy-sz); c2.lineTo(sx,sy+sz); c2.stroke();
+  // Label
+  c2.fillStyle = sel ? '#ff9800' : col;
+  c2.font = `${Math.max(9,10*zoom)}px monospace`;
+  c2.textAlign = 'left';
+  c2.fillText(e.text||'*', sx+sz+3, sy-3);
+  c2.restore();
+}
+
+function drawHatch(c2, e, col) {
+  const pts = (e.points||[]);
+  if(pts.length < 3) return;
+  const solid = (e.text||'').toUpperCase() === 'SOLID';
+  if(solid) {
+    // Solid fill: canvas path fill.
+    c2.save();
+    c2.fillStyle = col;
+    c2.globalAlpha = 0.35;
+    c2.beginPath();
+    const [fx,fy]=w2s(pts[0][0],pts[0][1]);
+    c2.moveTo(fx,fy);
+    for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
+    c2.closePath(); c2.fill();
+    c2.restore();
+  } else {
+    // Hatched fill: draw boundary + hatch lines via Go WASM if available.
+    c2.save();
+    c2.strokeStyle = col; c2.lineWidth = 0.8;
+    // Draw boundary
+    c2.beginPath();
+    const [fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
+    for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
+    c2.closePath(); c2.stroke();
+    // Draw hatch lines from WASM cadRenderHatch
+    if(wasmReady && window.cadRenderHatch) {
+      try {
+        const segs = JSON.parse(window.cadRenderHatch(e.id)||'[]');
+        segs.forEach(s=>{
+          const [sx1,sy1]=w2s(s[0],s[1]), [sx2,sy2]=w2s(s[2],s[3]);
+          c2.beginPath(); c2.moveTo(sx1,sy1); c2.lineTo(sx2,sy2); c2.stroke();
+        });
+      } catch(_){}
+    } else {
+      // Fallback: draw simple diagonal lines in screen space.
+      drawHatchFallback(c2, pts, col);
+    }
+    c2.restore();
+  }
+}
+
+function drawHatchFallback(c2, pts, col) {
+  // Simple diagonal line fill in screen space for demo mode.
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  pts.forEach(p=>{const[sx,sy]=w2s(p[0],p[1]);
+    if(sx<minX)minX=sx;if(sy<minY)minY=sy;if(sx>maxX)maxX=sx;if(sy>maxY)maxY=sy;
+  });
+  c2.save();
+  c2.strokeStyle=col; c2.lineWidth=0.7;
+  // Clip to polygon
+  c2.beginPath();
+  const[fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
+  for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
+  c2.closePath(); c2.clip();
+  const spacing=10;
+  for(let t=minX-maxY+minY;t<maxX+maxY-minY;t+=spacing){
+    c2.beginPath(); c2.moveTo(t,minY-spacing); c2.lineTo(t+maxY-minY+spacing,maxY+spacing); c2.stroke();
+  }
+  c2.restore();
+}
+
+function drawLeader(c2, e, col) {
+  const pts = e.points||[];
+  if(pts.length<2) return;
+  c2.save();
+  c2.strokeStyle=col; c2.fillStyle=col; c2.lineWidth=1; c2.setLineDash([]);
+  // Draw lines
+  c2.beginPath();
+  const[fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
+  for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
+  c2.stroke();
+  // Arrow at first point (tip)
+  const[p0x,p0y]=w2s(pts[0][0],pts[0][1]);
+  const[p1x,p1y]=w2s(pts[1][0],pts[1][1]);
+  screenArrow(c2,p0x,p0y,p0x-p1x,p0y-p1y);
+  // Label at last segment end
+  if(e.text){
+    const last=pts[pts.length-1];
+    const[lx,ly]=w2s(last[0],last[1]);
+    c2.font='11px sans-serif'; c2.textAlign='left';
+    c2.fillText(e.text,lx+4,ly-4);
+  }
+  c2.restore();
+}
+
+function drawRevCloud(c2, e, col) {
+  const pts = e.points||[];
+  if(pts.length<3) return;
+  // Draw polygon boundary with arc-like bumps on each edge.
+  c2.save();
+  c2.strokeStyle=col; c2.lineWidth=1; c2.setLineDash([]);
+  const all=[...pts, pts[0]]; // close polygon
+  for(let i=0;i<all.length-1;i++){
+    const[ax,ay]=w2s(all[i][0],all[i][1]);
+    const[bx,by]=w2s(all[i+1][0],all[i+1][1]);
+    const mx=(ax+bx)/2, my=(ay+by)/2;
+    const len=Math.hypot(bx-ax,by-ay)||1;
+    const nx=-(by-ay)/len, ny=(bx-ax)/len;
+    const bump=6; // px
+    c2.beginPath();
+    c2.moveTo(ax,ay);
+    c2.quadraticCurveTo(mx+nx*bump,my+ny*bump,bx,by);
+    c2.stroke();
+  }
+  c2.restore();
+}
+
+function drawWipeout(c2, e, col) {
+  const pts = e.points||[];
+  if(pts.length<3) return;
+  c2.save();
+  // Fill with near-background color to mask entities behind it.
+  c2.fillStyle='#1e1e1e';
+  c2.strokeStyle=col||'#555';
+  c2.lineWidth=1; c2.setLineDash([4,3]);
+  c2.beginPath();
+  const[fx,fy]=w2s(pts[0][0],pts[0][1]); c2.moveTo(fx,fy);
+  for(let i=1;i<pts.length;i++){const[px,py]=w2s(pts[i][0],pts[i][1]);c2.lineTo(px,py);}
+  c2.closePath(); c2.fill(); c2.stroke();
+  c2.restore();
 }
 
 // ── Spline renderers ──────────────────────────────────────────────────────────
@@ -1517,6 +1935,20 @@ function drawPreview(){
       if(c0){const r=Math.hypot(pt[0]-c0[0],pt[1]-c0[1]);
         ctx.beginPath();ctx.arc(c0[0],c0[1],r,0,2*Math.PI);ctx.stroke();
         ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(pt[0],pt[1]);ctx.stroke();} break;
+    // Task #7 previews
+    case 'hatch':case 'revcloud':case 'wipeout':{
+      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
+      if(all.length>=2) drawPolylineScrPts(ctx,all);
+      if(all.length>=3){
+        ctx.setLineDash([2,4]);
+        ctx.beginPath();ctx.moveTo(all[all.length-1][0],all[all.length-1][1]);ctx.lineTo(all[0][0],all[0][1]);ctx.stroke();
+      }
+      break;
+    }
+    case 'leader':{
+      const all=[...clicks.map(p=>w2s(p[0],p[1])),pt];
+      drawPolylineScrPts(ctx,all); break;
+    }
   }
   // Click markers
   clicks.forEach(([wx,wy])=>{

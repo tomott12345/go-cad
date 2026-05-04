@@ -52,6 +52,7 @@ import (
 
         "go-cad/internal/document"
         "go-cad/internal/snap"
+        "go-cad/internal/symbols"
         "go-cad/pkg/dxf"
         "go-cad/pkg/svg"
 )
@@ -89,6 +90,7 @@ var snapModeNames = map[string]snap.SnapType{
 
 func main() {
         doc := document.New()
+        symbols.Register(doc) // install built-in symbol blocks
         cfg := defaultSnapConfig()
 
         sc := bufio.NewScanner(os.Stdin)
@@ -515,6 +517,246 @@ func main() {
                         }
                         fmt.Printf("exported SVG to %s\n", args[0])
 
+                // ── Task #7: Blocks ─────────────────────────────────────────────────
+                case "BLOCK":
+                        // BLOCK name baseX baseY id1 id2 …
+                        if len(args) < 3 {
+                                fmt.Println("usage: BLOCK name baseX baseY [entityID …]")
+                                continue
+                        }
+                        coords, err := parseFloats(args[1:3])
+                        if err != nil {
+                                fmt.Println("error:", err)
+                                continue
+                        }
+                        var ids []int
+                        for _, s := range args[3:] {
+                                id, err2 := strconv.Atoi(s)
+                                if err2 != nil {
+                                        fmt.Printf("invalid id %q\n", s)
+                                        continue
+                                }
+                                ids = append(ids, id)
+                        }
+                        if doc.DefineBlock(args[0], coords[0], coords[1], ids) {
+                                fmt.Printf("defined block %q with %d entities\n", args[0], len(ids))
+                        } else {
+                                fmt.Printf("failed to define block %q\n", args[0])
+                        }
+
+                case "BLOCKS":
+                        blocks := doc.Blocks()
+                        if len(blocks) == 0 {
+                                fmt.Println("(no blocks defined)")
+                                continue
+                        }
+                        for _, b := range blocks {
+                                fmt.Printf("  %-20s  base=(%.2f,%.2f)  entities=%d\n",
+                                        b.Name, b.BaseX, b.BaseY, len(b.Entities))
+                        }
+                        fmt.Printf("%d blocks\n", len(blocks))
+
+                case "INSERT":
+                        // INSERT name x y [scaleX [scaleY [rotDeg]]]
+                        if len(args) < 3 {
+                                fmt.Println("usage: INSERT name x y [scaleX [scaleY [rotDeg]]]")
+                                continue
+                        }
+                        coords, err := parseFloats(args[1:3])
+                        if err != nil {
+                                fmt.Println("error:", err)
+                                continue
+                        }
+                        sx, sy, rot := 1.0, 1.0, 0.0
+                        if len(args) >= 4 {
+                                if v, e := strconv.ParseFloat(args[3], 64); e == nil {
+                                        sx = v
+                                }
+                        }
+                        if len(args) >= 5 {
+                                if v, e := strconv.ParseFloat(args[4], 64); e == nil {
+                                        sy = v
+                                }
+                        }
+                        if len(args) >= 6 {
+                                if v, e := strconv.ParseFloat(args[5], 64); e == nil {
+                                        rot = v
+                                }
+                        }
+                        id := doc.InsertBlock(args[0], coords[0], coords[1], sx, sy, rot,
+                                doc.CurrentLayer(), "BYLAYER")
+                        if id >= 0 {
+                                fmt.Printf("inserted block %q  id=%d\n", args[0], id)
+                        } else {
+                                fmt.Printf("block %q not found\n", args[0])
+                        }
+
+                case "EXPLODE":
+                        if len(args) < 1 {
+                                fmt.Println("usage: EXPLODE entityID")
+                                continue
+                        }
+                        eid, err := strconv.Atoi(args[0])
+                        if err != nil {
+                                fmt.Println("invalid id:", args[0])
+                                continue
+                        }
+                        eids := doc.ExplodeBlock(eid)
+                        if eids == nil {
+                                fmt.Printf("entity %d is not a block reference (or not found)\n", eid)
+                        } else {
+                                fmt.Printf("exploded %d → %v\n", eid, eids)
+                        }
+
+                // ── Task #7: Hatch ───────────────────────────────────────────────────
+                case "HATCH":
+                        // HATCH pattern angleDeg scale x1 y1 x2 y2 … (polygon boundary)
+                        if len(args) < 9 {
+                                fmt.Println("usage: HATCH pattern angleDeg scale x1 y1 x2 y2 [x3 y3 …]")
+                                continue
+                        }
+                        ang, _ := strconv.ParseFloat(args[1], 64)
+                        sc, _ := strconv.ParseFloat(args[2], 64)
+                        coordArgs := args[3:]
+                        if len(coordArgs)%2 != 0 || len(coordArgs) < 6 {
+                                fmt.Println("boundary must have at least 3 x y pairs")
+                                continue
+                        }
+                        var pts [][]float64
+                        for i := 0; i < len(coordArgs); i += 2 {
+                                x, ex := strconv.ParseFloat(coordArgs[i], 64)
+                                y, ey := strconv.ParseFloat(coordArgs[i+1], 64)
+                                if ex != nil || ey != nil {
+                                        fmt.Println("invalid coordinate")
+                                        break
+                                }
+                                pts = append(pts, []float64{x, y})
+                        }
+                        if len(pts) >= 3 {
+                                id := doc.AddHatch(pts, args[0], ang, sc, doc.CurrentLayer(), "BYLAYER")
+                                fmt.Printf("added hatch id=%d pattern=%s\n", id, args[0])
+                        }
+
+                // ── Task #7: Leader ──────────────────────────────────────────────────
+                case "LEADER":
+                        // LEADER "label" x1 y1 x2 y2 [x3 y3 …]
+                        if len(args) < 5 {
+                                fmt.Println("usage: LEADER label x1 y1 x2 y2 [x3 y3 …]")
+                                continue
+                        }
+                        label := args[0]
+                        coordArgs := args[1:]
+                        if len(coordArgs)%2 != 0 || len(coordArgs) < 4 {
+                                fmt.Println("must provide at least 2 x y pairs")
+                                continue
+                        }
+                        var pts [][]float64
+                        for i := 0; i < len(coordArgs); i += 2 {
+                                x, ex := strconv.ParseFloat(coordArgs[i], 64)
+                                y, ey := strconv.ParseFloat(coordArgs[i+1], 64)
+                                if ex != nil || ey != nil {
+                                        fmt.Println("invalid coordinate")
+                                        break
+                                }
+                                pts = append(pts, []float64{x, y})
+                        }
+                        if len(pts) >= 2 {
+                                id := doc.AddLeader(pts, label, doc.CurrentLayer(), "BYLAYER")
+                                fmt.Printf("added leader id=%d label=%q\n", id, label)
+                        }
+
+                // ── Task #7: Revision Cloud ──────────────────────────────────────────
+                case "REVCLOUD":
+                        // REVCLOUD arcLen x1 y1 x2 y2 …
+                        if len(args) < 5 {
+                                fmt.Println("usage: REVCLOUD arcLen x1 y1 x2 y2 [x3 y3 …]")
+                                continue
+                        }
+                        arcLen, err := strconv.ParseFloat(args[0], 64)
+                        if err != nil {
+                                fmt.Println("invalid arcLen:", args[0])
+                                continue
+                        }
+                        coordArgs := args[1:]
+                        if len(coordArgs)%2 != 0 || len(coordArgs) < 6 {
+                                fmt.Println("boundary must have at least 3 x y pairs")
+                                continue
+                        }
+                        var pts [][]float64
+                        for i := 0; i < len(coordArgs); i += 2 {
+                                x, ex := strconv.ParseFloat(coordArgs[i], 64)
+                                y, ey := strconv.ParseFloat(coordArgs[i+1], 64)
+                                if ex != nil || ey != nil {
+                                        fmt.Println("invalid coordinate")
+                                        break
+                                }
+                                pts = append(pts, []float64{x, y})
+                        }
+                        if len(pts) >= 3 {
+                                id := doc.AddRevisionCloud(pts, arcLen, doc.CurrentLayer(), "BYLAYER")
+                                fmt.Printf("added revision cloud id=%d arcLen=%.2f\n", id, arcLen)
+                        }
+
+                // ── Task #7: Wipeout ─────────────────────────────────────────────────
+                case "WIPEOUT":
+                        // WIPEOUT x1 y1 x2 y2 …
+                        if len(args) < 6 || len(args)%2 != 0 {
+                                fmt.Println("usage: WIPEOUT x1 y1 x2 y2 [x3 y3 …]  (at least 3 pts)")
+                                continue
+                        }
+                        var pts [][]float64
+                        for i := 0; i < len(args); i += 2 {
+                                x, ex := strconv.ParseFloat(args[i], 64)
+                                y, ey := strconv.ParseFloat(args[i+1], 64)
+                                if ex != nil || ey != nil {
+                                        fmt.Println("invalid coordinate")
+                                        break
+                                }
+                                pts = append(pts, []float64{x, y})
+                        }
+                        if len(pts) >= 3 {
+                                id := doc.AddWipeout(pts, doc.CurrentLayer(), "BYLAYER")
+                                fmt.Printf("added wipeout id=%d\n", id)
+                        }
+
+                // ── Task #7: Symbols ─────────────────────────────────────────────────
+                case "SYMBOLS":
+                        names := symbols.Names()
+                        fmt.Printf("%d built-in symbols:\n", len(names))
+                        for _, n := range names {
+                                fmt.Printf("  %s\n", n)
+                        }
+
+                case "SYMBOL":
+                        // SYMBOL name x y [scale [rotDeg]]
+                        if len(args) < 3 {
+                                fmt.Println("usage: SYMBOL name x y [scale [rotDeg]]")
+                                continue
+                        }
+                        coords, err := parseFloats(args[1:3])
+                        if err != nil {
+                                fmt.Println("error:", err)
+                                continue
+                        }
+                        sc2, rot2 := 1.0, 0.0
+                        if len(args) >= 4 {
+                                if v, e := strconv.ParseFloat(args[3], 64); e == nil {
+                                        sc2 = v
+                                }
+                        }
+                        if len(args) >= 5 {
+                                if v, e := strconv.ParseFloat(args[4], 64); e == nil {
+                                        rot2 = v
+                                }
+                        }
+                        if doc.BlockByName(args[0]) == nil {
+                                fmt.Printf("symbol %q not found — use SYMBOLS to list available\n", args[0])
+                                continue
+                        }
+                        id := doc.InsertBlock(args[0], coords[0], coords[1], sc2, sc2, rot2,
+                                doc.CurrentLayer(), "BYLAYER")
+                        fmt.Printf("inserted symbol %q  id=%d\n", args[0], id)
+
                 default:
                         fmt.Printf("unknown command %q — type HELP\n", cmd)
                 }
@@ -605,10 +847,28 @@ Object snap:
   SNAPMODE modeName true|false    toggle individual snap mode
   FINDSNAP x y radius             run snap query and print result
 
+Blocks:
+  BLOCK name baseX baseY [id …]  define a named block from entity IDs
+  BLOCKS                          list all defined blocks
+  INSERT name x y [sx [sy [rot]]] insert block reference
+  EXPLODE entityID               explode a block reference into entities
+
+Hatching & annotations:
+  HATCH pat ang scale x y x y …  add hatch fill (SOLID/ANSI31/ANSI32/DOTS)
+  LEADER label x y x y …         add a leader with label
+  REVCLOUD arcLen x y x y …       add a revision cloud polygon
+  WIPEOUT x y x y …              add a wipeout mask polygon
+
+Symbols:
+  SYMBOLS                         list built-in symbols
+  SYMBOL name x y [scale [rot]]  insert a built-in symbol
+
 File I/O:
   SAVE file.json                  save document
   LOAD file.json                  load document
-  EXPORT file.dxf [r12]          export DXF
+  IMPORT file.dxf                 import DXF (undo-able)
+  EXPORT file.dxf [r12]          export DXF (default R2000)
+  EXPORTSVG file.svg              export SVG
 
   HELP   QUIT
 `)
