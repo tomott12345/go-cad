@@ -37,15 +37,33 @@ func (e *ErrCommandNotFound) Error() string {
 // Host is safe for concurrent use: all plugin-registry maps (plugins, tools,
 // commands, subs) are protected by mu, and all document mutations are
 // serialised through docMu.
+//
+// # Ownership and unload
+//
+// When a plugin is loaded it receives a [pluginScopedAPI] wrapper that records
+// every RegisterCommand / RegisterTool / Subscribe call it makes.
+// UnloadPlugin uses that record to purge all artifacts when the plugin is
+// removed, so no stale command routes survive an unload.
 type Host struct {
         doc      *document.Document
         mu       sync.RWMutex // protects plugin/tool/command/subscription maps
         docMu    sync.Mutex   // serialises all document read/write operations
         plugins  map[string]plugin.Plugin
+        scoped   map[string]*pluginScopedAPI // ownership record per plugin
         tools    map[string]plugin.ToolDescriptor
         commands map[string]plugin.CommandDescriptor
         subs     map[string]subscription
         subSeq   atomic.Int64
+}
+
+// pluginScopedAPI wraps *Host and records every registration a plugin makes
+// so that UnloadPlugin can fully purge those registrations.
+type pluginScopedAPI struct {
+        host     *Host
+        mu       sync.Mutex
+        commands []string // all names + aliases registered
+        tools    []string // tool names registered
+        subs     []string // subscription IDs registered
 }
 
 type subscription struct {
@@ -58,10 +76,51 @@ func New(doc *document.Document) *Host {
         return &Host{
                 doc:      doc,
                 plugins:  make(map[string]plugin.Plugin),
+                scoped:   make(map[string]*pluginScopedAPI),
                 tools:    make(map[string]plugin.ToolDescriptor),
                 commands: make(map[string]plugin.CommandDescriptor),
                 subs:     make(map[string]subscription),
         }
+}
+
+// ─── pluginScopedAPI — delegates to Host, recording what each plugin registers ─
+
+func (s *pluginScopedAPI) AddEntity(e plugin.Entity) (int, error) {
+        return s.host.AddEntity(e)
+}
+func (s *pluginScopedAPI) DeleteEntity(id int) bool { return s.host.DeleteEntity(id) }
+func (s *pluginScopedAPI) GetEntities() []plugin.Entity {
+        return s.host.GetEntities()
+}
+func (s *pluginScopedAPI) GetDocument() plugin.DocumentInfo { return s.host.GetDocument() }
+func (s *pluginScopedAPI) Subscribe(kind plugin.EventKind, handler plugin.EventHandler) string {
+        id := s.host.Subscribe(kind, handler)
+        s.mu.Lock()
+        s.subs = append(s.subs, id)
+        s.mu.Unlock()
+        return id
+}
+func (s *pluginScopedAPI) Unsubscribe(id string) { s.host.Unsubscribe(id) }
+func (s *pluginScopedAPI) RegisterTool(td plugin.ToolDescriptor) error {
+        if err := s.host.RegisterTool(td); err != nil {
+                return err
+        }
+        s.mu.Lock()
+        s.tools = append(s.tools, td.Name)
+        s.mu.Unlock()
+        return nil
+}
+func (s *pluginScopedAPI) RegisterCommand(cd plugin.CommandDescriptor) error {
+        if err := s.host.RegisterCommand(cd); err != nil {
+                return err
+        }
+        s.mu.Lock()
+        s.commands = append(s.commands, cd.Name)
+        for _, a := range cd.Aliases {
+                s.commands = append(s.commands, a)
+        }
+        s.mu.Unlock()
+        return nil
 }
 
 // ─── plugin.HostAPI implementation ───────────────────────────────────────────
@@ -242,28 +301,56 @@ func (h *Host) LoadDocument(path string) error {
 
 // ─── Plugin management ────────────────────────────────────────────────────────
 
-// LoadPlugin calls p.Register and stores the plugin if successful.
+// LoadPlugin calls p.Register (via a scoped wrapper that records registrations)
+// and stores the plugin if successful.
 func (h *Host) LoadPlugin(p plugin.Plugin) error {
-        if err := p.Register(h); err != nil {
+        sc := &pluginScopedAPI{host: h}
+        if err := p.Register(sc); err != nil {
                 return fmt.Errorf("pluginhost: register %q: %w", p.Name(), err)
         }
         h.mu.Lock()
         h.plugins[p.Name()] = p
+        h.scoped[p.Name()] = sc
         h.mu.Unlock()
         return nil
 }
 
-// UnloadPlugin calls p.Unregister and removes it from the registry.
+// UnloadPlugin calls p.Unregister, removes it from the registry, and purges
+// all commands, tools, and subscriptions it registered.
 func (h *Host) UnloadPlugin(name string) error {
         h.mu.Lock()
         p, ok := h.plugins[name]
+        sc := h.scoped[name]
         if ok {
                 delete(h.plugins, name)
+                delete(h.scoped, name)
         }
         h.mu.Unlock()
         if !ok {
                 return fmt.Errorf("pluginhost: plugin %q not loaded", name)
         }
+
+        // Purge all artifacts registered by this plugin.
+        if sc != nil {
+                sc.mu.Lock()
+                cmds := append([]string(nil), sc.commands...)
+                tools := append([]string(nil), sc.tools...)
+                subs := append([]string(nil), sc.subs...)
+                sc.mu.Unlock()
+
+                h.mu.Lock()
+                for _, c := range cmds {
+                        delete(h.commands, c)
+                }
+                for _, t := range tools {
+                        delete(h.tools, t)
+                }
+                for _, sid := range subs {
+                        delete(h.subs, sid)
+                }
+                h.mu.Unlock()
+        }
+
         return p.Unregister()
 }
 
