@@ -8,7 +8,7 @@ import { initCommandBar, processCommand }          from './commands.js';
 import { initPanels }                              from './panels.js';
 import { initInspector }                           from './inspector.js';
 import { initHistory, setReplayCallback }           from './history.js';
-import { initWelcome }                             from './welcome.js';
+import { initWelcome, addRecentFile }              from './welcome.js';
 import { initDialogs, refreshLayers, openLayerManager,
          openBlockManager, openSymbolsPanel,
          openDraftingSettings, openPrintPlot }    from './dialogs.js';
@@ -52,10 +52,11 @@ import { initDialogs, refreshLayers, openLayerManager,
   updateSnapBtn();
   refreshLayers();
   render();
-  setTool('line');
+  setTool('select');
 
   // 9. Toolbar buttons
-  ['line','circle','arc','rect','poly','spline','nurbs','ellipse','text','mtext',
+  ['select',
+   'line','circle','arc','rect','poly','spline','nurbs','ellipse','text','mtext',
    'dimlin','dimali','dimang','dimrad','dimdia',
    'move','copy','rotate','scale','mirror','trim','extend','fillet','chamfer','arrayrect','arraypolar','offset',
    'hatch','leader','revcloud','wipeout',
@@ -100,6 +101,7 @@ import { initDialogs, refreshLayers, openLayerManager,
       try { result = JSON.parse(window.cadLoadDXF(e.target.result)); }
       catch (err) { setStatus('DXF import failed: ' + err.message); return; }
       if (!result.ok) { setStatus('DXF import error: ' + result.error); return; }
+      addRecentFile(file.name);
       refreshLayers();
       invalidateBlockCache();
       render();
@@ -148,7 +150,9 @@ import { initDialogs, refreshLayers, openLayerManager,
     }
     if (e.key === 'Escape') {
       state.clicks = []; state.snapResult = null;
+      state.editPickIds = [];
       import('./snap.js').then(m => m.drawSnapMarker());
+      setTool('select');
       render();
     }
     if (e.key === 'Enter' &&
@@ -167,14 +171,6 @@ import { initDialogs, refreshLayers, openLayerManager,
     }
   });
 
-  // ── Snap popover close-on-outside-click ──────────────────────────────────────
-  document.addEventListener('click', e => {
-    const panel = document.getElementById('snap-settings');
-    if (panel?.classList.contains('open') &&
-        !panel.contains(e.target) &&
-        e.target.id !== 'btn-snap-settings') {
-      panel.classList.remove('open');
-    }
-  });
+  // Note: snap popover close-on-outside-click is handled exclusively in snap.js
 
 })();

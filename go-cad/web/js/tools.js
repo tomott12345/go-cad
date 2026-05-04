@@ -6,6 +6,7 @@ import { showEntityProperties, clearInspector } from './inspector.js';
 
 // ── Tool hints ─────────────────────────────────────────────────────────────────
 const toolHints = {
+  select:     'Select: click entity to inspect / edit properties',
   line:       'Line: click start point',
   circle:     'Circle: click centre',
   arc:        'Arc: click centre',
@@ -236,6 +237,33 @@ function onMouseDown(e) {
 
   const snap = snapWorldPt(sx, sy);
   const [wx, wy] = snap ? [snap.x, snap.y] : s2w(sx, sy);
+
+  // ── Select tool: single-click picks entity and shows inspector ──────────
+  if (state.currentTool === 'select') {
+    if (state.wasmReady) {
+      const thresh = 12 / state.zoom;
+      const ents   = JSON.parse(window.cadEntities() || '[]');
+      let   best   = 0, bestD = thresh;
+      ents.forEach(ent => {
+        entitySamplePoints(ent).forEach(([ex, ey]) => {
+          const d = Math.hypot(ex - wx, ey - wy);
+          if (d < bestD) { bestD = d; best = ent.id; }
+        });
+      });
+      if (best) {
+        state.selectedId = best;
+        const found = ents.find(e => e.id === best);
+        if (found) showEntityProperties(found);
+        setStatus(`Selected entity #${best} (${found?.type || '?'})`);
+      } else {
+        state.selectedId = 0;
+        clearInspector();
+        setStatus('Select: no entity near cursor. Click on an entity to inspect it.');
+      }
+      render();
+    }
+    return;
+  }
 
   // ── Edit-op tools: pick entity on first click ────────────────────────────
   const editTools = ['move','copy','rotate','scale','mirror','trim','extend','fillet','chamfer','arrayrect','arraypolar','offset'];

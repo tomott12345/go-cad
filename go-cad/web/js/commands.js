@@ -5,6 +5,7 @@ import { setTool, tryDelete, commitEntity, applyCoordInput } from './tools.js';
 import { addHistoryEntry, updateLastResult } from './history.js';
 
 const toolMap = {
+  SELECT:'select', SE:'select',
   LINE:'line', L:'line',
   CIRCLE:'circle', C:'circle',
   ARC:'arc', A:'arc',

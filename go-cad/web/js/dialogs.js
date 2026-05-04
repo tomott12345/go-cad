@@ -1,6 +1,6 @@
 // web/js/dialogs.js — Layer Manager, Block Manager, Symbols, Drafting Settings, Print/Plot
 import { state, setStatus, escH, invalidateBlockCache } from './state.js';
-import { render, zoomFit, w2s } from './canvas.js';
+import { render, zoomFit, w2s, s2w, entitySamplePoints } from './canvas.js';
 import { setTool } from './tools.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -331,16 +331,84 @@ export function applyDraftingSettings() {
 // ── Print / Plot Dialog ────────────────────────────────────────────────────────
 export function openPrintPlot() {
   // Show/hide DPI row based on format
-  const fmtEl = document.getElementById('print-fmt');
+  const fmtEl  = document.getElementById('print-fmt');
   const dpiRow = document.getElementById('print-dpi-row');
   function updateDpiRow() {
     if (dpiRow) dpiRow.style.display = (fmtEl?.value === 'png') ? 'flex' : 'none';
   }
   updateDpiRow();
   fmtEl?.addEventListener('change', updateDpiRow);
+
+  // Plot-area preview overlay — show on canvas behind dialog
+  createPlotPreviewEl();
+  updatePlotPreview();
+  document.getElementById('print-area')?.addEventListener('change', updatePlotPreview);
+
   openModal('print-modal');
 }
-export function closePrintPlot() { closeModal('print-modal'); }
+export function closePrintPlot() {
+  removePlotPreview();
+  closeModal('print-modal');
+}
+
+// ── Plot-area bounding box ──────────────────────────────────────────────────────
+// Returns world-coordinate bounds {minX,minY,maxX,maxY} for the chosen area,
+// or null if nothing to export.
+function getPlotBounds(area) {
+  const srcCanvas = document.getElementById('canvas');
+  if (!srcCanvas) return null;
+  if (area === 'view') {
+    // Current viewport: convert screen corners to world coords via static import
+    const [wx0, wy0] = s2w(0, 0);
+    const [wx1, wy1] = s2w(srcCanvas.width, srcCanvas.height);
+    return { minX: Math.min(wx0,wx1), maxX: Math.max(wx0,wx1),
+             minY: Math.min(wy0,wy1), maxY: Math.max(wy0,wy1) };
+  }
+  // 'all' — entity extents
+  if (!state.wasmReady || !window.cadEntities) return null;
+  const ents = JSON.parse(window.cadEntities() || '[]');
+  if (!ents.length) return null;
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  ents.forEach(e => entitySamplePoints(e).forEach(([x,y]) => {
+    if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y;
+  }));
+  if (!isFinite(minX)) return null;
+  const pad = (maxX - minX + maxY - minY) * 0.02 + 1;
+  return { minX: minX-pad, maxX: maxX+pad, minY: minY-pad, maxY: maxY+pad };
+}
+
+// ── Plot-area preview overlay ───────────────────────────────────────────────────
+function updatePlotPreview() {
+  const overlay = document.getElementById('_plot-preview');
+  if (!overlay) return;
+  const area = document.getElementById('print-area')?.value || 'all';
+  const srcCanvas = document.getElementById('canvas');
+  if (!srcCanvas) { overlay.style.display = 'none'; return; }
+  const bounds = getPlotBounds(area);
+  if (!bounds) { overlay.style.display = 'none'; return; }
+  const [sx0, sy0] = w2s(bounds.minX, bounds.maxY); // top-left in screen
+  const [sx1, sy1] = w2s(bounds.maxX, bounds.minY); // bottom-right in screen
+  const rect = srcCanvas.getBoundingClientRect();
+  overlay.style.display = 'block';
+  overlay.style.left    = (rect.left + Math.min(sx0,sx1)) + 'px';
+  overlay.style.top     = (rect.top  + Math.min(sy0,sy1)) + 'px';
+  overlay.style.width   = Math.abs(sx1-sx0) + 'px';
+  overlay.style.height  = Math.abs(sy1-sy0) + 'px';
+}
+
+function createPlotPreviewEl() {
+  let el = document.getElementById('_plot-preview');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_plot-preview';
+    el.style.cssText = 'position:fixed;pointer-events:none;border:2px dashed #f90;background:rgba(255,153,0,0.06);z-index:50;display:none';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function removePlotPreview() {
+  document.getElementById('_plot-preview')?.remove();
+}
 
 export function executePrint() {
   const fmt     = document.getElementById('print-fmt')?.value || 'pdf';
@@ -351,8 +419,12 @@ export function executePrint() {
   const paper   = document.getElementById('print-paper')?.value || 'a4';
   const orient  = document.getElementById('print-orient')?.value || 'landscape';
 
+  // Determine scale multiplier (world-units-per-mm or "fit")
+  const scaleRatios = { 'fit':0, '1:1':1, '1:2':0.5, '1:5':0.2, '1:10':0.1, '1:50':0.02, '1:100':0.01 };
+  const scaleRatio = scaleRatios[scale] ?? 0; // 0 = fit
+
   if (fmt === 'pdf') {
-    // Apply @page CSS for chosen paper/orientation/margins, then print
+    // Apply @page CSS for chosen paper/orientation/margins then invoke browser print
     const pageCSS = `@page { size: ${paper} ${orient}; margin: ${margins}mm; }`;
     let styleEl = document.getElementById('_print-page-style');
     if (!styleEl) {
@@ -362,33 +434,61 @@ export function executePrint() {
     }
     styleEl.textContent = pageCSS;
     window.print();
-    setStatus(`PDF print dialog opened (${paper} ${orient}, ${margins}mm margins).`);
+    setStatus(`PDF print dialog opened (${paper} ${orient}, ${margins}mm margins, area: ${area}).`);
   } else if (fmt === 'svg') {
     if (!state.wasmReady || !window.cadExportSVG) { setStatus('SVG export requires WASM.'); return; }
-    const svg = window.cadExportSVG();
+    const bounds = getPlotBounds(area);
+    // cadExportSVG accepts optional bounding box to crop the output
+    let svgStr;
+    if (bounds && window.cadExportSVGRegion) {
+      svgStr = window.cadExportSVGRegion(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    } else {
+      svgStr = window.cadExportSVG();
+    }
+    // Apply scale: add viewBox and width/height if scale != fit
+    if (scaleRatio > 0 && bounds) {
+      const wMM = (bounds.maxX - bounds.minX) * scaleRatio;
+      const hMM = (bounds.maxY - bounds.minY) * scaleRatio;
+      svgStr = svgStr.replace(/<svg([^>]*)>/, `<svg$1 width="${wMM.toFixed(2)}mm" height="${hMM.toFixed(2)}mm">`);
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    a.href = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml' }));
     a.download = 'drawing.svg';
     a.click();
     URL.revokeObjectURL(a.href);
-    setStatus('Exported drawing.svg');
+    setStatus(`Exported drawing.svg (area: ${area}, scale: ${scale}).`);
   } else {
-    // PNG export — scale canvas to requested DPI
+    // PNG export — apply area bounds and DPI
     const srcCanvas = document.getElementById('canvas');
     if (!srcCanvas) return;
     const scaleFactor = dpi / 96;
+    let sx0 = 0, sy0 = 0, sw = srcCanvas.width, sh = srcCanvas.height;
+    if (true) {
+      const bounds = getPlotBounds(area);
+      if (bounds) {
+        const [bsx0, bsy0] = w2s(bounds.minX, bounds.maxY);
+        const [bsx1, bsy1] = w2s(bounds.maxX, bounds.minY);
+        sx0 = Math.max(0, Math.floor(Math.min(bsx0,bsx1)));
+        sy0 = Math.max(0, Math.floor(Math.min(bsy0,bsy1)));
+        sw  = Math.min(srcCanvas.width  - sx0, Math.ceil(Math.abs(bsx1-bsx0)));
+        sh  = Math.min(srcCanvas.height - sy0, Math.ceil(Math.abs(bsy1-bsy0)));
+      }
+    }
+    const outW = Math.max(1, Math.round(sw * scaleFactor));
+    const outH = Math.max(1, Math.round(sh * scaleFactor));
     const offscreen = document.createElement('canvas');
-    offscreen.width  = Math.round(srcCanvas.width  * scaleFactor);
-    offscreen.height = Math.round(srcCanvas.height * scaleFactor);
+    offscreen.width  = outW;
+    offscreen.height = outH;
     const ctx2 = offscreen.getContext('2d');
     ctx2.scale(scaleFactor, scaleFactor);
-    ctx2.drawImage(srcCanvas, 0, 0);
+    ctx2.drawImage(srcCanvas, sx0, sy0, sw, sh, 0, 0, sw, sh);
     const a = document.createElement('a');
     a.href     = offscreen.toDataURL('image/png');
     a.download = `drawing_${dpi}dpi.png`;
     a.click();
-    setStatus(`Exported drawing_${dpi}dpi.png (${offscreen.width}×${offscreen.height}px)`);
+    setStatus(`Exported PNG ${outW}×${outH}px (area: ${area}, scale: ${scale}, ${dpi}dpi).`);
   }
+  removePlotPreview();
   closePrintPlot();
 }
 
