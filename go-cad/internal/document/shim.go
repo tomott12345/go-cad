@@ -66,11 +66,39 @@ func (e Entity) ToGeometryEntity() geometry.Entity {
                 }
                 return geometry.BezierEntity{BezierSpline: geometry.NewBezierSpline(pts)}
 
+        case TypeNURBS:
+                nc := len(e.Points)
+                if nc == 0 {
+                        return nil
+                }
+                deg := e.NURBSDegree
+                if deg < 1 {
+                        deg = 3
+                }
+                knots := e.Knots
+                if len(knots) < nc+deg+1 {
+                        knots = nurbsClampedUniformKnots(nc, deg)
+                }
+                weights := e.Weights
+                if len(weights) != nc {
+                        weights = make([]float64, nc)
+                        for i := range weights {
+                                weights[i] = 1
+                        }
+                }
+                controls := make([]geometry.Point, nc)
+                for i, p := range e.Points {
+                        if len(p) >= 2 {
+                                controls[i] = geometry.Point{X: p[0], Y: p[1]}
+                        }
+                }
+                return geometry.NURBSEntity{NURBSSpline: geometry.NewNURBSSpline(deg, knots, controls, weights)}
+
         case TypeEllipse:
                 return geometry.EllipseEntity{Ellipse: geometry.NewEllipse(e.CX, e.CY, e.R, e.R2, e.RotDeg)}
 
-        case TypeText:
-                // Text has no geometric boundary for snap/intersect; return nil.
+        case TypeText, TypeMText:
+                // Text entities have no geometric boundary for snap/intersect.
                 return nil
 
         case TypeDimLinear, TypeDimAligned:
@@ -81,8 +109,7 @@ func (e Entity) ToGeometryEntity() geometry.Entity {
                 }}
 
         case TypeDimAngular, TypeDimRadial, TypeDimDiameter:
-                // Angular/radial/diameter dims snap to their centre point only — no
-                // geometry representative is returned; they fall back to the point test.
+                // No geometry representative; fall back to centre-point proximity test.
                 return nil
 
         default:
@@ -174,6 +201,24 @@ func GeometryEntityToDocument(ge geometry.Entity, layer int, color string) *Enti
                         Type:   TypeSpline,
                         Layer:  layer, Color: color,
                         Points: pts,
+                }
+
+        case geometry.NURBSEntity:
+                pts := make([][]float64, len(v.Controls))
+                for i, p := range v.Controls {
+                        pts[i] = []float64{p.X, p.Y}
+                }
+                knots := make([]float64, len(v.Knots))
+                copy(knots, v.Knots)
+                weights := make([]float64, len(v.Weights))
+                copy(weights, v.Weights)
+                return &Entity{
+                        Type:        TypeNURBS,
+                        Layer:       layer, Color: color,
+                        NURBSDegree: v.Degree,
+                        Points:      pts,
+                        Knots:       knots,
+                        Weights:     weights,
                 }
 
         default:

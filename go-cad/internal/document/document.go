@@ -1,5 +1,5 @@
 // Package document provides the core CAD document model shared by both
-// the native desktop (Fyne) and the browser WASM targets.
+// the native desktop and the browser WASM targets.
 package document
 
 import (
@@ -18,9 +18,11 @@ const (
 	TypeArc         = "arc"
 	TypeRectangle   = "rectangle"
 	TypePolyline    = "polyline"
-	TypeSpline      = "spline"
+	TypeSpline      = "spline"  // cubic Bezier spline (control-point chain)
+	TypeNURBS       = "nurbs"   // Non-Uniform Rational B-Spline
 	TypeEllipse     = "ellipse"
-	TypeText        = "text"
+	TypeText        = "text"    // single-line text
+	TypeMText       = "mtext"   // multi-line text
 	TypeDimLinear   = "dimlin"
 	TypeDimAligned  = "dimali"
 	TypeDimAngular  = "dimang"
@@ -29,9 +31,9 @@ const (
 )
 
 // Entity represents any CAD primitive stored in a document.
-// All numeric fields that are always present are serialised without omitempty
-// so that zero-valued coordinates are preserved correctly in JSON.
-// New optional fields use omitempty.
+// Fields shared across many entity types (x1/y1, cx/cy, r, etc.) are reused
+// according to the Type discriminator. Optional fields use omitempty so that
+// zero-valued entries are omitted from the JSON serialisation.
 type Entity struct {
 	ID       int         `json:"id"`
 	Type     string      `json:"type"`
@@ -47,15 +49,21 @@ type Entity struct {
 	StartDeg float64     `json:"startDeg"`
 	EndDeg   float64     `json:"endDeg"`
 	Points   [][]float64 `json:"points,omitempty"`
-	// New fields (Task #3 — Advanced Drawing Tools)
-	R2         float64 `json:"r2,omitempty"`         // ellipse semi-minor axis
-	RotDeg     float64 `json:"rotDeg,omitempty"`     // ellipse/text/dim leader rotation (degrees)
-	Text       string  `json:"text,omitempty"`       // text content
-	TextHeight float64 `json:"textHeight,omitempty"` // font height in document units
+
+	// Advanced entity fields (Task #3 — Advanced Drawing Tools)
+	R2         float64   `json:"r2,omitempty"`         // ellipse semi-minor axis; MTEXT reference rectangle width
+	RotDeg     float64   `json:"rotDeg,omitempty"`     // ellipse/text/dim rotation in degrees (CCW)
+	Text       string    `json:"text,omitempty"`       // text content (single-line or multi-line; use \n for line breaks)
+	TextHeight float64   `json:"textHeight,omitempty"` // font cap-height in document units
+	Font       string    `json:"font,omitempty"`       // SHX / TTF font / text-style name (DXF group 7)
+
+	// NURBS-specific fields
+	NURBSDegree int       `json:"nurbsDeg,omitempty"` // B-spline degree (typically 3)
+	Knots       []float64 `json:"knots,omitempty"`    // knot vector (len = nControls + nurbsDeg + 1)
+	Weights     []float64 `json:"weights,omitempty"`  // rational weights (len = nControls; nil ↦ all 1)
 }
 
-// Length returns the geometric length / circumference of the entity
-// (useful for the properties panel).
+// Length returns the geometric length / circumference of the entity.
 func (e Entity) Length() float64 {
 	switch e.Type {
 	case TypeLine:
@@ -78,28 +86,34 @@ func (e Entity) Length() float64 {
 		}
 		return total
 	case TypeSpline:
-		// Approximate arc length via polyline of control points (fast estimate).
-		// The geometry engine gives a more accurate value via BezierSpline.
+		// Fast estimate via control-polygon chord length.
 		total := 0.0
 		for i := 1; i < len(e.Points); i++ {
 			total += math.Hypot(e.Points[i][0]-e.Points[i-1][0],
 				e.Points[i][1]-e.Points[i-1][1])
 		}
 		return total
+	case TypeNURBS:
+		// Approximate arc length via a 100-sample polyline.
+		pts := nurbsApprox(e, 100)
+		total := 0.0
+		for i := 1; i < len(pts); i++ {
+			total += math.Hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1])
+		}
+		return total
 	case TypeEllipse:
-		// Ramanujan's formula for ellipse circumference.
 		a, b := e.R, e.R2
 		if b < 0 {
 			b = -b
 		}
-		h := (a-b)*(a-b)/((a+b)*(a+b)+1e-12)
+		denom := (a+b)*(a+b) + 1e-12
+		h := (a-b)*(a-b)/denom
 		return math.Pi * (a + b) * (1 + 3*h/(10+math.Sqrt(4-3*h)))
-	case TypeText:
+	case TypeText, TypeMText:
 		return 0
 	case TypeDimLinear, TypeDimAligned:
 		return math.Hypot(e.X2-e.X1, e.Y2-e.Y1)
 	case TypeDimAngular:
-		// Arc length of the angular dim arc (radius × angle in radians).
 		dx1, dy1 := e.X1-e.CX, e.Y1-e.CY
 		dx2, dy2 := e.X2-e.CX, e.Y2-e.CY
 		ang1 := math.Atan2(dy1, dx1)
@@ -117,11 +131,102 @@ func (e Entity) Length() float64 {
 	return 0
 }
 
-// maxUndoDepth caps the undo stack to prevent unbounded memory growth when
-// many operations are performed in a single session.
+// ─── NURBS helpers (pure Go, no geometry-package import needed here) ──────────
+
+// nurbsBasis evaluates the Cox-de Boor basis N_{i,k}(t).
+func nurbsBasis(i, k int, knots []float64, t float64) float64 {
+	if k == 0 {
+		if knots[i] <= t && t < knots[i+1] {
+			return 1
+		}
+		return 0
+	}
+	d1 := knots[i+k] - knots[i]
+	d2 := knots[i+k+1] - knots[i+1]
+	var left, right float64
+	if d1 > 1e-12 {
+		left = (t-knots[i])/d1*nurbsBasis(i, k-1, knots, t)
+	}
+	if d2 > 1e-12 {
+		right = (knots[i+k+1]-t)/d2*nurbsBasis(i+1, k-1, knots, t)
+	}
+	return left + right
+}
+
+// nurbsPoint evaluates a rational B-spline at parameter t.
+func nurbsPoint(degree int, controls [][]float64, knots []float64, weights []float64, t float64) [2]float64 {
+	n := len(controls)
+	var wx, wy, w float64
+	for i := 0; i < n; i++ {
+		b := nurbsBasis(i, degree, knots, t)
+		wi := 1.0
+		if i < len(weights) {
+			wi = weights[i]
+		}
+		bw := b * wi
+		wx += bw * controls[i][0]
+		wy += bw * controls[i][1]
+		w += bw
+	}
+	if w < 1e-12 {
+		if len(controls) > 0 {
+			return [2]float64{controls[0][0], controls[0][1]}
+		}
+		return [2]float64{}
+	}
+	return [2]float64{wx / w, wy / w}
+}
+
+// nurbsClampedUniformKnots generates a clamped uniform knot vector.
+func nurbsClampedUniformKnots(nControls, degree int) []float64 {
+	m := nControls + degree + 1
+	knots := make([]float64, m)
+	inner := nControls - degree
+	for i := 0; i <= degree; i++ {
+		knots[i] = 0
+	}
+	for i := 1; i < inner; i++ {
+		knots[degree+i] = float64(i) / float64(inner)
+	}
+	for i := nControls; i < m; i++ {
+		knots[i] = 1
+	}
+	return knots
+}
+
+// nurbsApprox returns n+1 world-space sample points along the NURBS curve.
+func nurbsApprox(e Entity, n int) [][2]float64 {
+	controls := e.Points
+	nc := len(controls)
+	if nc == 0 {
+		return nil
+	}
+	deg := e.NURBSDegree
+	if deg < 1 {
+		deg = 3
+	}
+	knots := e.Knots
+	if len(knots) < nc+deg+1 {
+		knots = nurbsClampedUniformKnots(nc, deg)
+	}
+	lo := knots[deg]
+	hi := knots[nc]
+	pts := make([][2]float64, n+1)
+	for i := 0; i <= n; i++ {
+		t := lo + float64(i)/float64(n)*(hi-lo)
+		if t >= hi {
+			t = hi - 1e-12
+		}
+		pts[i] = nurbsPoint(deg, controls, knots, e.Weights, t)
+	}
+	return pts
+}
+
+// ─── maxUndoDepth ────────────────────────────────────────────────────────────
+
 const maxUndoDepth = 100
 
-// ─── Document ────────────────────────────────────────────────────────────────
+// ─── Document ─────────────────────────────────────────────────────────────────
 
 // Document is the in-memory CAD document with undo/redo support.
 type Document struct {
@@ -132,9 +237,7 @@ type Document struct {
 }
 
 // New returns an empty Document ready for use.
-func New() *Document {
-	return &Document{nextID: 1}
-}
+func New() *Document { return &Document{nextID: 1} }
 
 // Entities returns a copy of the current entity slice.
 func (d *Document) Entities() []Entity {
@@ -146,7 +249,7 @@ func (d *Document) Entities() []Entity {
 // EntityCount returns the number of entities in the document.
 func (d *Document) EntityCount() int { return len(d.entities) }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
+// ─── Internal helpers ──────────────────────────────────────────────────────────
 
 func (d *Document) snapshot() []Entity {
 	cp := make([]Entity, len(d.entities))
@@ -156,11 +259,10 @@ func (d *Document) snapshot() []Entity {
 
 func (d *Document) pushUndo() {
 	d.undoStack = append(d.undoStack, d.snapshot())
-	// Trim oldest entries if we exceed the cap.
 	if len(d.undoStack) > maxUndoDepth {
 		d.undoStack = d.undoStack[len(d.undoStack)-maxUndoDepth:]
 	}
-	d.redoStack = nil // adding a new action clears the redo stack
+	d.redoStack = nil
 }
 
 func (d *Document) add(e Entity) int {
@@ -174,7 +276,7 @@ func (d *Document) add(e Entity) int {
 	return e.ID
 }
 
-// ─── Add operations ───────────────────────────────────────────────────────────
+// ─── Primitive Add operations ─────────────────────────────────────────────────
 
 func (d *Document) AddLine(x1, y1, x2, y2 float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeLine, X1: x1, Y1: y1, X2: x2, Y2: y2, Layer: layer, Color: color})
@@ -196,60 +298,113 @@ func (d *Document) AddPolyline(points [][]float64, layer int, color string) int 
 	return d.add(Entity{Type: TypePolyline, Points: points, Layer: layer, Color: color})
 }
 
-// AddSpline adds a cubic Bezier spline entity defined by control points.
-// For a single cubic segment, supply exactly 4 points; for N segments supply
-// 3N+1 points with shared endpoints (the standard cubic Bezier chain layout).
-// Keyboard shortcut: S / command: SPLINE
+// ─── Advanced Add operations (Task #3) ────────────────────────────────────────
+
+// AddSpline adds a cubic Bezier spline defined by control points (chain layout:
+// [p0, cp1, cp2, p1, cp3, cp4, p2, …]; need ≥ 4 points for one segment).
+// Command: SPLINE  /  Shortcut: S
 func (d *Document) AddSpline(points [][]float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeSpline, Points: points, Layer: layer, Color: color})
 }
 
+// AddNURBS adds a rational B-spline (NURBS) entity.
+// degree: B-spline degree (typically 3 = cubic).
+// controls: control point coordinates [[x,y], …].
+// knots: knot vector (len must equal len(controls)+degree+1); pass nil for
+//        auto-generated clamped uniform knots.
+// weights: rational weights (len must equal len(controls)); pass nil for all-1
+//          uniform weights (i.e. a non-rational B-spline).
+// Command: NURBS
+func (d *Document) AddNURBS(degree int, controls [][]float64, knots []float64, weights []float64, layer int, color string) int {
+	nc := len(controls)
+	if degree < 1 {
+		degree = 3
+	}
+	if len(knots) < nc+degree+1 {
+		knots = nurbsClampedUniformKnots(nc, degree)
+	}
+	// Normalise weights: nil or wrong length → all-1 slice.
+	if len(weights) != nc {
+		w := make([]float64, nc)
+		for i := range w {
+			w[i] = 1
+		}
+		weights = w
+	}
+	return d.add(Entity{
+		Type: TypeNURBS, NURBSDegree: degree,
+		Points: controls, Knots: knots, Weights: weights,
+		Layer: layer, Color: color,
+	})
+}
+
 // AddEllipse adds an ellipse entity.
 // cx, cy: centre; a: semi-major axis; b: semi-minor axis; rotDeg: rotation
-// angle in degrees CCW from the positive X-axis.
-// Keyboard shortcut: E / command: ELLIPSE
+// angle (degrees CCW from +X).
+// Command: ELLIPSE  /  Shortcut: E
 func (d *Document) AddEllipse(cx, cy, a, b, rotDeg float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeEllipse, CX: cx, CY: cy, R: a, R2: b, RotDeg: rotDeg, Layer: layer, Color: color})
 }
 
-// AddText adds a single-line text entity anchored at (x, y).
-// height is the cap-height in document units; rotDeg is the baseline rotation
-// in degrees CCW.  font is stored in the Color field for DXF SHX compatibility
-// when a non-empty string is passed; otherwise the entity color is used.
-// Keyboard shortcut: T / command: TEXT
-func (d *Document) AddText(x, y float64, text string, height, rotDeg float64, layer int, color string) int {
-	return d.add(Entity{Type: TypeText, X1: x, Y1: y, Text: text, TextHeight: height, RotDeg: rotDeg, Layer: layer, Color: color})
+// AddText adds a single-line text entity at insertion point (x, y).
+// height: cap-height in document units; rotDeg: baseline angle (CCW degrees).
+// font: SHX or TTF font / text-style name (empty = "Standard").
+// Command: TEXT  /  Shortcut: T
+func (d *Document) AddText(x, y float64, text string, height, rotDeg float64, font string, layer int, color string) int {
+	return d.add(Entity{
+		Type: TypeText, X1: x, Y1: y,
+		Text: text, TextHeight: height, RotDeg: rotDeg,
+		Font:  font,
+		Layer: layer, Color: color,
+	})
 }
 
-// AddLinearDim adds a linear dimension entity between two definition points.
-// offset is the signed perpendicular distance from the measurement line to the
-// dimension line (positive = above/left depending on orientation).
+// AddMText adds a multi-line text entity.
+// x, y: insertion point (top-left corner by default).
+// text: content string; use "\n" for paragraph breaks (exported as "\\P" in DXF MTEXT).
+// height: character height in document units.
+// width: reference rectangle width (0 = no wrapping).
+// rotDeg: rotation of the entire text block (CCW degrees).
+// font: SHX or TTF font / text-style name (empty = "Standard").
+// Command: MTEXT
+func (d *Document) AddMText(x, y float64, text string, height, width, rotDeg float64, font string, layer int, color string) int {
+	return d.add(Entity{
+		Type: TypeMText, X1: x, Y1: y,
+		Text: text, TextHeight: height, R2: width, RotDeg: rotDeg,
+		Font:  font,
+		Layer: layer, Color: color,
+	})
+}
+
+// AddLinearDim adds a linear (horizontal or vertical) dimension.
+// x1,y1 and x2,y2: definition points; offset: perpendicular distance from
+// the measurement line to the dimension line (positive = above/left).
 // Command: DIMLIN
 func (d *Document) AddLinearDim(x1, y1, x2, y2, offset float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeDimLinear, X1: x1, Y1: y1, X2: x2, Y2: y2, CX: offset, Layer: layer, Color: color})
 }
 
-// AddAlignedDim adds an aligned dimension entity (along the entity direction).
-// offset is the perpendicular offset of the dimension line from the measured segment.
+// AddAlignedDim adds an aligned dimension (along the entity direction).
+// offset: perpendicular offset of the dimension line from the measured segment.
 // Command: DIMALI
 func (d *Document) AddAlignedDim(x1, y1, x2, y2, offset float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeDimAligned, X1: x1, Y1: y1, X2: x2, Y2: y2, CX: offset, Layer: layer, Color: color})
 }
 
 // AddAngularDim adds an angular dimension between two rays from a common vertex.
-// cx, cy: vertex; x1, y1 and x2, y2: points on the two rays; radius: arc radius.
+// cx, cy: vertex; x1,y1 and x2,y2: points on the two rays; radius: arc radius.
 // Command: DIMANG
 func (d *Document) AddAngularDim(cx, cy, x1, y1, x2, y2, radius float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeDimAngular, CX: cx, CY: cy, X1: x1, Y1: y1, X2: x2, Y2: y2, R: radius, Layer: layer, Color: color})
 }
 
-// AddRadialDim adds a radial dimension with a leader line at angle rotDeg.
+// AddRadialDim adds a radial dimension with a leader at angle rotDeg (degrees).
 // Command: DIMRAD
 func (d *Document) AddRadialDim(cx, cy, r, angle float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeDimRadial, CX: cx, CY: cy, R: r, RotDeg: angle, Layer: layer, Color: color})
 }
 
-// AddDiameterDim adds a diameter dimension with a leader line at angle rotDeg.
+// AddDiameterDim adds a diameter dimension with a leader at angle rotDeg (degrees).
 // Command: DIMDIA
 func (d *Document) AddDiameterDim(cx, cy, r, angle float64, layer int, color string) int {
 	return d.add(Entity{Type: TypeDimDiameter, CX: cx, CY: cy, R: r, RotDeg: angle, Layer: layer, Color: color})
@@ -307,9 +462,8 @@ func (d *Document) ToJSON() string {
 
 // ─── Generic add ──────────────────────────────────────────────────────────────
 
-// AddEntity adds a generic entity to the document.
-// The entity's ID field is ignored; a new ID is assigned.
-// Returns the new entity ID, or -1 for an unknown type.
+// AddEntity adds a generic entity, dispatching on its Type field.
+// The entity's ID is ignored; a new one is assigned. Returns -1 for unknown types.
 func (d *Document) AddEntity(e Entity) int {
 	switch e.Type {
 	case TypeLine:
@@ -324,10 +478,14 @@ func (d *Document) AddEntity(e Entity) int {
 		return d.AddPolyline(e.Points, e.Layer, e.Color)
 	case TypeSpline:
 		return d.AddSpline(e.Points, e.Layer, e.Color)
+	case TypeNURBS:
+		return d.AddNURBS(e.NURBSDegree, e.Points, e.Knots, e.Weights, e.Layer, e.Color)
 	case TypeEllipse:
 		return d.AddEllipse(e.CX, e.CY, e.R, e.R2, e.RotDeg, e.Layer, e.Color)
 	case TypeText:
-		return d.AddText(e.X1, e.Y1, e.Text, e.TextHeight, e.RotDeg, e.Layer, e.Color)
+		return d.AddText(e.X1, e.Y1, e.Text, e.TextHeight, e.RotDeg, e.Font, e.Layer, e.Color)
+	case TypeMText:
+		return d.AddMText(e.X1, e.Y1, e.Text, e.TextHeight, e.R2, e.RotDeg, e.Font, e.Layer, e.Color)
 	case TypeDimLinear:
 		return d.AddLinearDim(e.X1, e.Y1, e.X2, e.Y2, e.CX, e.Layer, e.Color)
 	case TypeDimAligned:
@@ -345,7 +503,6 @@ func (d *Document) AddEntity(e Entity) int {
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
-// Save serialises all entities to a JSON file at path.
 func (d *Document) Save(path string) error {
 	data, err := json.Marshal(d.entities)
 	if err != nil {
@@ -357,8 +514,6 @@ func (d *Document) Save(path string) error {
 	return nil
 }
 
-// Load replaces the document contents from a JSON file at path.
-// A snapshot is pushed onto the undo stack so the load can be undone.
 func (d *Document) Load(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -380,12 +535,38 @@ func (d *Document) Load(path string) error {
 
 // ─── DXF export ───────────────────────────────────────────────────────────────
 
-// ExportDXF returns a DXF R12/R2000-compatible string for all entities.
-// Y-axis is flipped (DXF uses Cartesian, canvas uses screen coordinates).
+// ExportDXF returns a DXF R2000 (AC1015) string for all entities.
+// Splines are exported as LWPOLYLINE approximations; dimensions as proper
+// DIMENSION entities with AcDb subclass markers; ellipses as ELLIPSE entities.
+// Y-axis is flipped (DXF Cartesian vs. screen coordinates).
 func (d *Document) ExportDXF() string {
+	return d.exportDXF(false)
+}
+
+// ExportDXFR12 returns a DXF R12 (AC1009) string for all entities.
+// All entities are reduced to R12-compatible primitives (LINE, CIRCLE, ARC,
+// TEXT, POLYLINE+VERTEX+SEQEND) so the file loads in legacy applications such
+// as AutoCAD R12, early QCAD, and embedded controllers.
+//
+// Differences from ExportDXF (R2000):
+//   - Version header: AC1009 instead of AC1015
+//   - Splines/NURBS: POLYLINE+VERTEX+SEQEND instead of LWPOLYLINE
+//   - Ellipses: POLYLINE approximation instead of native ELLIPSE entity
+//   - Dimensions: LINE + TEXT helper geometry instead of DIMENSION entities
+//   - MTEXT: approximated as multiple TEXT entities (one per line)
+func (d *Document) ExportDXFR12() string {
+	return d.exportDXF(true)
+}
+
+func (d *Document) exportDXF(r12 bool) string {
+	ver := "AC1015"
+	if r12 {
+		ver = "AC1009"
+	}
 	var sb strings.Builder
-	sb.WriteString("  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1015\n  0\nENDSEC\n")
+	fmt.Fprintf(&sb, "  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\n%s\n  0\nENDSEC\n", ver)
 	sb.WriteString("  0\nSECTION\n  2\nENTITIES\n")
+
 	for _, e := range d.entities {
 		switch e.Type {
 		case TypeLine:
@@ -402,85 +583,182 @@ func (d *Document) ExportDXF() string {
 
 		case TypeRectangle:
 			x1, y1, x2, y2 := e.X1, e.Y1, e.X2, e.Y2
-			fmt.Fprintf(&sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n", e.Layer, x1, -y1, x2, -y1)
-			fmt.Fprintf(&sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n", e.Layer, x2, -y1, x2, -y2)
-			fmt.Fprintf(&sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n", e.Layer, x2, -y2, x1, -y2)
-			fmt.Fprintf(&sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n", e.Layer, x1, -y2, x1, -y1)
+			dxfLine(&sb, e.Layer, x1, y1, x2, y1)
+			dxfLine(&sb, e.Layer, x2, y1, x2, y2)
+			dxfLine(&sb, e.Layer, x2, y2, x1, y2)
+			dxfLine(&sb, e.Layer, x1, y2, x1, y1)
 
 		case TypePolyline:
-			if len(e.Points) < 2 {
-				continue
-			}
-			for i := 0; i < len(e.Points)-1; i++ {
-				p1, p2 := e.Points[i], e.Points[i+1]
-				fmt.Fprintf(&sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-					e.Layer, p1[0], -p1[1], p2[0], -p2[1])
-			}
+			dxfPolylineLines(&sb, e.Layer, e.Points)
 
 		case TypeSpline:
-			// Export as a LWPOLYLINE approximation (DXF R2000).
 			pts := approxBezierPoints(e.Points, 20)
-			if len(pts) < 2 {
-				continue
+			if r12 {
+				dxfR12Polyline(&sb, e.Layer, pts)
+			} else {
+				dxfLWPolyline(&sb, e.Layer, pts)
 			}
-			fmt.Fprintf(&sb, "  0\nLWPOLYLINE\n  8\n%d\n 90\n%d\n 70\n0\n",
-				e.Layer, len(pts))
-			for _, p := range pts {
-				fmt.Fprintf(&sb, " 10\n%f\n 20\n%f\n", p[0], -p[1])
+
+		case TypeNURBS:
+			pts := nurbsApprox(e, 50)
+			pts2 := make([][2]float64, len(pts))
+			copy(pts2, pts)
+			if r12 {
+				dxfR12Polyline(&sb, e.Layer, pts2)
+			} else {
+				dxfLWPolyline(&sb, e.Layer, pts2)
 			}
 
 		case TypeEllipse:
-			// DXF R2000 ELLIPSE entity.
-			// Group 11,21: endpoint of major axis relative to centre (before rotation).
-			// Group 40: ratio of minor to major axis (b/a).
-			rot := e.RotDeg * math.Pi / 180
-			mx := e.R * math.Cos(rot)
-			my := e.R * math.Sin(rot)
-			ratio := 1.0
-			if e.R > 1e-12 {
-				ratio = e.R2 / e.R
+			if r12 {
+				// Approximate as POLYLINE in R12.
+				el := ellipseApprox(e.CX, e.CY, e.R, e.R2, e.RotDeg, 72)
+				dxfR12Polyline(&sb, e.Layer, el)
+			} else {
+				// Native ELLIPSE entity (R2000).
+				rot := e.RotDeg * math.Pi / 180
+				mx := e.R * math.Cos(rot)
+				my := e.R * math.Sin(rot)
+				ratio := 1.0
+				if e.R > 1e-12 {
+					ratio = e.R2 / e.R
+				}
+				fmt.Fprintf(&sb,
+					"  0\nELLIPSE\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 11\n%f\n 21\n%f\n 31\n0.0\n 40\n%f\n 41\n0.0\n 42\n%f\n",
+					e.Layer, e.CX, -e.CY, mx, -my, ratio, 2*math.Pi)
 			}
-			fmt.Fprintf(&sb,
-				"  0\nELLIPSE\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 11\n%f\n 21\n%f\n 31\n0.0\n 40\n%f\n 41\n0.0\n 42\n%f\n",
-				e.Layer, e.CX, -e.CY, mx, -my, ratio, 2*math.Pi)
 
 		case TypeText:
 			h := e.TextHeight
 			if h <= 0 {
 				h = 2.5
 			}
+			style := e.Font
+			if style == "" {
+				style = "Standard"
+			}
 			fmt.Fprintf(&sb,
-				"  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n%f\n  1\n%s\n 50\n%f\n",
-				e.Layer, e.X1, -e.Y1, h, e.Text, e.RotDeg)
+				"  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n%f\n  1\n%s\n 50\n%f\n  7\n%s\n",
+				e.Layer, e.X1, -e.Y1, h, e.Text, e.RotDeg, style)
+
+		case TypeMText:
+			h := e.TextHeight
+			if h <= 0 {
+				h = 2.5
+			}
+			width := e.R2 // reference rectangle width
+			style := e.Font
+			if style == "" {
+				style = "Standard"
+			}
+			if r12 {
+				// R12 doesn't have MTEXT; emit one TEXT per line.
+				lines := strings.Split(e.Text, "\n")
+				for i, line := range lines {
+					fmt.Fprintf(&sb,
+						"  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n%f\n  1\n%s\n 50\n%f\n  7\n%s\n",
+						e.Layer, e.X1, -(e.Y1-float64(i)*h*1.5), h,
+						line, e.RotDeg, style)
+				}
+			} else {
+				// Replace newlines with DXF MTEXT paragraph separator "\\P".
+				content := strings.ReplaceAll(e.Text, "\n", "\\P")
+				fmt.Fprintf(&sb,
+					"  0\nMTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n%f\n 41\n%f\n 71\n1\n 72\n1\n  1\n%s\n  7\n%s\n 50\n%f\n",
+					e.Layer, e.X1, -e.Y1, h, width, content, style, e.RotDeg)
+			}
 
 		case TypeDimLinear:
-			dxfLinearDim(&sb, e)
+			if r12 {
+				dxfLinearDimLines(&sb, e)
+			} else {
+				dxfDimensionLinear(&sb, e)
+			}
 
 		case TypeDimAligned:
-			dxfAlignedDim(&sb, e)
+			if r12 {
+				dxfAlignedDimLines(&sb, e)
+			} else {
+				dxfDimensionAligned(&sb, e)
+			}
 
 		case TypeDimAngular:
-			dxfAngularDim(&sb, e)
+			if r12 {
+				dxfAngularDimLines(&sb, e)
+			} else {
+				dxfDimensionAngular(&sb, e)
+			}
 
 		case TypeDimRadial:
-			dxfRadialDim(&sb, e)
+			if r12 {
+				dxfRadialDimLines(&sb, e)
+			} else {
+				dxfDimensionRadial(&sb, e)
+			}
 
 		case TypeDimDiameter:
-			dxfDiameterDim(&sb, e)
+			if r12 {
+				dxfDiameterDimLines(&sb, e)
+			} else {
+				dxfDimensionDiameter(&sb, e)
+			}
 		}
 	}
+
 	sb.WriteString("  0\nENDSEC\n  0\nEOF\n")
 	return sb.String()
 }
 
-// ─── DXF helpers ──────────────────────────────────────────────────────────────
+// ─── DXF primitive helpers ────────────────────────────────────────────────────
 
-// approxBezierPoints returns a polyline approximation of a cubic Bezier spline
-// defined by control points pts. n = subdivisions per segment.
+func dxfLine(sb *strings.Builder, layer int, x1, y1, x2, y2 float64) {
+	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
+		layer, x1, -y1, x2, -y2)
+}
+
+func dxfText(sb *strings.Builder, layer int, x, y, h float64, text string, style string) {
+	if style == "" {
+		style = "Standard"
+	}
+	fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n%f\n  1\n%s\n 50\n0.0\n  7\n%s\n",
+		layer, x, -y, h, text, style)
+}
+
+// dxfPolylineLines emits a series of LINE entities for a polyline.
+func dxfPolylineLines(sb *strings.Builder, layer int, pts [][]float64) {
+	for i := 0; i < len(pts)-1; i++ {
+		dxfLine(sb, layer, pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1])
+	}
+}
+
+// dxfR12Polyline emits a POLYLINE + VERTEX + SEQEND block (R12 compatible).
+func dxfR12Polyline(sb *strings.Builder, layer int, pts [][2]float64) {
+	if len(pts) < 2 {
+		return
+	}
+	fmt.Fprintf(sb, "  0\nPOLYLINE\n  8\n%d\n 66\n1\n 70\n0\n", layer)
+	for _, p := range pts {
+		fmt.Fprintf(sb, "  0\nVERTEX\n  8\n%d\n 10\n%f\n 20\n%f\n", layer, p[0], -p[1])
+	}
+	sb.WriteString("  0\nSEQEND\n")
+}
+
+// dxfLWPolyline emits an LWPOLYLINE entity (R2000+).
+func dxfLWPolyline(sb *strings.Builder, layer int, pts [][2]float64) {
+	if len(pts) < 2 {
+		return
+	}
+	fmt.Fprintf(sb, "  0\nLWPOLYLINE\n  8\n%d\n 90\n%d\n 70\n0\n", layer, len(pts))
+	for _, p := range pts {
+		fmt.Fprintf(sb, " 10\n%f\n 20\n%f\n", p[0], -p[1])
+	}
+}
+
+// ─── Bezier approximation helper ──────────────────────────────────────────────
+
 func approxBezierPoints(pts [][]float64, n int) [][2]float64 {
 	nCtrl := len(pts)
 	if nCtrl < 4 {
-		// Not enough for even one cubic segment; just return as-is.
 		out := make([][2]float64, nCtrl)
 		for i, p := range pts {
 			if len(p) >= 2 {
@@ -505,122 +783,219 @@ func approxBezierPoints(pts [][]float64, n int) [][2]float64 {
 			out = append(out, [2]float64{x, y})
 		}
 	}
-	// Add final point.
 	last := pts[len(pts)-1]
 	out = append(out, [2]float64{last[0], last[1]})
 	return out
 }
 
-// arrowLine emits a DXF LINE arrowhead at point p in direction dir of length len.
-func arrowLine(sb *strings.Builder, layer int, px, py, dx, dy float64) {
-	alen := 3.0 // arrowhead size in document units
-	// Normalize direction
+// ─── Ellipse approximation helper ────────────────────────────────────────────
+
+func ellipseApprox(cx, cy, a, b, rotDeg float64, n int) [][2]float64 {
+	rot := rotDeg * math.Pi / 180
+	cosR, sinR := math.Cos(rot), math.Sin(rot)
+	pts := make([][2]float64, n+1)
+	for i := 0; i <= n; i++ {
+		theta := 2 * math.Pi * float64(i) / float64(n)
+		lx := a * math.Cos(theta)
+		ly := b * math.Sin(theta)
+		pts[i] = [2]float64{
+			cx + lx*cosR - ly*sinR,
+			cy + lx*sinR + ly*cosR,
+		}
+	}
+	return pts
+}
+
+// ─── R2000 DIMENSION entities ─────────────────────────────────────────────────
+//
+// Group-code layout used here:
+//   0  DIMENSION
+//   8  layer
+//  100 AcDbEntity
+//  100 AcDbDimension
+//    3 style name ("Standard")
+//   70 type flags (0=rotated/linear, 1=aligned, 2=angular3pt, 3=diameter, 4=radial)
+//   10,20,30  dimension-line definition point
+//   11,21,31  text insertion point
+//    1 measurement text override (empty = auto)
+//   42 actual measurement value
+//  100 AcDb<Type>Dimension  (subclass marker)
+//   13,23,33  first extension line origin
+//   14,24,34  second extension line origin
+//   50 rotation angle (AcDbRotatedDimension only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func dxfDimHeader(sb *strings.Builder, layer int, dimType int,
+	dlX, dlY, textX, textY, measurement float64) {
+	// AcDbDimension header common to all dimension types.
+	fmt.Fprintf(sb, "  0\nDIMENSION\n  8\n%d\n100\nAcDbEntity\n100\nAcDbDimension\n  3\nStandard\n 70\n%d\n",
+		layer, dimType)
+	fmt.Fprintf(sb, " 10\n%f\n 20\n%f\n 30\n0.0\n", dlX, -dlY)
+	fmt.Fprintf(sb, " 11\n%f\n 21\n%f\n 31\n0.0\n", textX, -textY)
+	fmt.Fprintf(sb, "  1\n\n 42\n%f\n", measurement)
+}
+
+// dxfDimensionLinear emits a DIMENSION entity for TypeDimLinear.
+func dxfDimensionLinear(sb *strings.Builder, e Entity) {
+	dx := e.X2 - e.X1
+	dy := e.Y2 - e.Y1
+	isHoriz := math.Abs(dx) >= math.Abs(dy)
+	off := e.CX
+	measured := math.Abs(dx)
+	rotAngle := 0.0
+	var dlX, dlY float64
+	if isHoriz {
+		dlX = (e.X1 + e.X2) / 2
+		dlY = (e.Y1+e.Y2)/2 - off
+	} else {
+		measured = math.Abs(dy)
+		rotAngle = 90
+		dlX = (e.X1+e.X2)/2 - off
+		dlY = (e.Y1 + e.Y2) / 2
+	}
+	dxfDimHeader(sb, e.Layer, 0, dlX, dlY, dlX, dlY, measured)
+	sb.WriteString("100\nAcDbAlignedDimension\n")
+	fmt.Fprintf(sb, " 13\n%f\n 23\n%f\n 33\n0.0\n", e.X1, -e.Y1)
+	fmt.Fprintf(sb, " 14\n%f\n 24\n%f\n 34\n0.0\n", e.X2, -e.Y2)
+	sb.WriteString("100\nAcDbRotatedDimension\n")
+	fmt.Fprintf(sb, " 50\n%f\n", rotAngle)
+}
+
+// dxfDimensionAligned emits a DIMENSION entity for TypeDimAligned.
+func dxfDimensionAligned(sb *strings.Builder, e Entity) {
+	dist := math.Hypot(e.X2-e.X1, e.Y2-e.Y1)
+	off := e.CX
+	// Perpendicular offset direction.
+	ux, uy := e.X2-e.X1, e.Y2-e.Y1
+	if dist > 1e-12 {
+		ux /= dist
+		uy /= dist
+	}
+	dlX := (e.X1+e.X2)/2 + (-uy)*off
+	dlY := (e.Y1+e.Y2)/2 + ux*off
+	dxfDimHeader(sb, e.Layer, 1, dlX, dlY, dlX, dlY, dist)
+	sb.WriteString("100\nAcDbAlignedDimension\n")
+	fmt.Fprintf(sb, " 13\n%f\n 23\n%f\n 33\n0.0\n", e.X1, -e.Y1)
+	fmt.Fprintf(sb, " 14\n%f\n 24\n%f\n 34\n0.0\n", e.X2, -e.Y2)
+}
+
+// dxfDimensionAngular emits a DIMENSION entity for TypeDimAngular.
+func dxfDimensionAngular(sb *strings.Builder, e Entity) {
+	ang1 := math.Atan2(e.Y1-e.CY, e.X1-e.CX)
+	ang2 := math.Atan2(e.Y2-e.CY, e.X2-e.CX)
+	span := ang2 - ang1
+	if span < 0 {
+		span += 2 * math.Pi
+	}
+	angDeg := span * 180 / math.Pi
+	midAng := ang1 + span/2
+	r := e.R
+	if r <= 0 {
+		r = math.Min(math.Hypot(e.X1-e.CX, e.Y1-e.CY), math.Hypot(e.X2-e.CX, e.Y2-e.CY)) * 0.5
+	}
+	dlX := e.CX + r*math.Cos(midAng)
+	dlY := e.CY + r*math.Sin(midAng)
+	dxfDimHeader(sb, e.Layer, 2, dlX, dlY, dlX, dlY, angDeg)
+	sb.WriteString("100\nAcDb3PointAngularDimension\n")
+	// For angular3pt: 13,23=first ray end; 14,24=second ray end; 15,25=vertex; 16,26=arc point.
+	fmt.Fprintf(sb, " 13\n%f\n 23\n%f\n 33\n0.0\n", e.X1, -e.Y1)
+	fmt.Fprintf(sb, " 14\n%f\n 24\n%f\n 34\n0.0\n", e.X2, -e.Y2)
+	fmt.Fprintf(sb, " 15\n%f\n 25\n%f\n 35\n0.0\n", e.CX, -e.CY)
+	fmt.Fprintf(sb, " 16\n%f\n 26\n%f\n 36\n0.0\n", dlX, -dlY)
+}
+
+// dxfDimensionRadial emits a DIMENSION entity for TypeDimRadial.
+func dxfDimensionRadial(sb *strings.Builder, e Entity) {
+	ang := e.RotDeg * math.Pi / 180
+	px := e.CX + e.R*math.Cos(ang)
+	py := e.CY + e.R*math.Sin(ang)
+	// Group 10,20 = point on circle; group 15,25 = centre.
+	dxfDimHeader(sb, e.Layer, 4, px, py, px+(e.R+4)*math.Cos(ang), py+(e.R+4)*math.Sin(ang), e.R)
+	sb.WriteString("100\nAcDbRadialDimension\n")
+	fmt.Fprintf(sb, " 15\n%f\n 25\n%f\n 35\n0.0\n", e.CX, -e.CY)
+	fmt.Fprintf(sb, " 40\n%f\n", e.R) // leader length
+}
+
+// dxfDimensionDiameter emits a DIMENSION entity for TypeDimDiameter.
+func dxfDimensionDiameter(sb *strings.Builder, e Entity) {
+	ang := e.RotDeg * math.Pi / 180
+	px := e.CX + e.R*math.Cos(ang)
+	py := e.CY + e.R*math.Sin(ang)
+	px2 := e.CX - e.R*math.Cos(ang)
+	py2 := e.CY - e.R*math.Sin(ang)
+	dxfDimHeader(sb, e.Layer, 3, px, py, e.CX+(e.R+4)*math.Cos(ang), e.CY+(e.R+4)*math.Sin(ang), 2*e.R)
+	sb.WriteString("100\nAcDbDiametricDimension\n")
+	fmt.Fprintf(sb, " 15\n%f\n 25\n%f\n 35\n0.0\n", px2, -py2)
+	fmt.Fprintf(sb, " 40\n%f\n", e.R) // leader length
+}
+
+// ─── R12 dimension helpers (LINE + TEXT approximations) ───────────────────────
+
+func dxfArrowLine(sb *strings.Builder, layer int, px, py, dx, dy float64) {
+	alen := 3.0
 	mag := math.Hypot(dx, dy)
 	if mag < 1e-12 {
 		return
 	}
 	dx /= mag
 	dy /= mag
-	// Two barb lines at ±20° from the backward direction
 	for _, sign := range []float64{1, -1} {
 		ang := math.Atan2(dy, dx) + math.Pi + sign*math.Pi/9
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			layer, px, -py,
-			px+math.Cos(ang)*alen, -(py+math.Sin(ang)*alen))
+		dxfLine(sb, layer, px, py, px+math.Cos(ang)*alen, py+math.Sin(ang)*alen)
 	}
 }
 
-// dxfLinearDim emits a linear dimension as LINE + TEXT entities.
-// e.X1,Y1 and e.X2,Y2 are the definition points; e.CX is the offset of the
-// dimension line from the Y midpoint (horizontal dim) or X midpoint (vertical).
-func dxfLinearDim(sb *strings.Builder, e Entity) {
-	// Determine if horizontal or vertical based on coordinates.
+func dxfLinearDimLines(sb *strings.Builder, e Entity) {
 	dx := e.X2 - e.X1
 	dy := e.Y2 - e.Y1
-	offset := e.CX
+	off := e.CX
 	if math.Abs(dx) >= math.Abs(dy) {
-		// Horizontal dimension: dim line runs parallel to X axis at Y = midY - offset.
-		dimY := (e.Y1+e.Y2)/2 - offset
-		// Extension lines from definition points to dim line.
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, e.X1, -e.Y1, e.X1, -dimY)
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, e.X2, -e.Y2, e.X2, -dimY)
-		// Dimension line.
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, e.X1, -dimY, e.X2, -dimY)
-		// Arrowheads.
-		arrowLine(sb, e.Layer, e.X1, dimY, e.X2-e.X1, 0)
-		arrowLine(sb, e.Layer, e.X2, dimY, e.X1-e.X2, 0)
-		// Text label.
-		midX := (e.X1 + e.X2) / 2
-		val := math.Abs(dx)
-		fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n2.5\n  1\n%.3f\n 50\n0.0\n",
-			e.Layer, midX, -dimY+2, val)
+		dimY := (e.Y1+e.Y2)/2 - off
+		dxfLine(sb, e.Layer, e.X1, e.Y1, e.X1, dimY)
+		dxfLine(sb, e.Layer, e.X2, e.Y2, e.X2, dimY)
+		dxfLine(sb, e.Layer, e.X1, dimY, e.X2, dimY)
+		dxfArrowLine(sb, e.Layer, e.X1, dimY, e.X2-e.X1, 0)
+		dxfArrowLine(sb, e.Layer, e.X2, dimY, e.X1-e.X2, 0)
+		mid := (e.X1 + e.X2) / 2
+		dxfText(sb, e.Layer, mid, dimY-2, 2.5, fmt.Sprintf("%.3f", math.Abs(dx)), "Standard")
 	} else {
-		// Vertical dimension: dim line runs parallel to Y axis at X = midX - offset.
-		dimX := (e.X1+e.X2)/2 - offset
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, e.X1, -e.Y1, dimX, -e.Y1)
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, e.X2, -e.Y2, dimX, -e.Y2)
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, dimX, -e.Y1, dimX, -e.Y2)
-		arrowLine(sb, e.Layer, dimX, e.Y1, 0, e.Y2-e.Y1)
-		arrowLine(sb, e.Layer, dimX, e.Y2, 0, e.Y1-e.Y2)
-		midY := (e.Y1 + e.Y2) / 2
-		val := math.Abs(dy)
-		fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n2.5\n  1\n%.3f\n 50\n90.0\n",
-			e.Layer, dimX-3, -midY, val)
+		dimX := (e.X1+e.X2)/2 - off
+		dxfLine(sb, e.Layer, e.X1, e.Y1, dimX, e.Y1)
+		dxfLine(sb, e.Layer, e.X2, e.Y2, dimX, e.Y2)
+		dxfLine(sb, e.Layer, dimX, e.Y1, dimX, e.Y2)
+		dxfArrowLine(sb, e.Layer, dimX, e.Y1, 0, e.Y2-e.Y1)
+		dxfArrowLine(sb, e.Layer, dimX, e.Y2, 0, e.Y1-e.Y2)
+		mid := (e.Y1 + e.Y2) / 2
+		dxfText(sb, e.Layer, dimX-3, mid, 2.5, fmt.Sprintf("%.3f", math.Abs(dy)), "Standard")
 	}
 }
 
-// dxfAlignedDim emits an aligned dimension (along the direction of the segment).
-func dxfAlignedDim(sb *strings.Builder, e Entity) {
+func dxfAlignedDimLines(sb *strings.Builder, e Entity) {
 	dx := e.X2 - e.X1
 	dy := e.Y2 - e.Y1
 	dist := math.Hypot(dx, dy)
 	if dist < 1e-12 {
 		return
 	}
-	// Unit direction and perpendicular.
 	ux, uy := dx/dist, dy/dist
-	px, py := -uy, ux // perpendicular (left normal)
-
-	offset := e.CX
-	// Dim line endpoints: offset from definition points along perpendicular.
-	d1x, d1y := e.X1+px*offset, e.Y1+py*offset
-	d2x, d2y := e.X2+px*offset, e.Y2+py*offset
-
-	// Extension lines.
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, e.X1, -e.Y1, d1x, -d1y)
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, e.X2, -e.Y2, d2x, -d2y)
-	// Dimension line.
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, d1x, -d1y, d2x, -d2y)
-	arrowLine(sb, e.Layer, d1x, d1y, d2x-d1x, d2y-d1y)
-	arrowLine(sb, e.Layer, d2x, d2y, d1x-d2x, d1y-d2y)
-	// Text.
-	midX := (d1x + d2x) / 2
-	midY := (d1y + d2y) / 2
-	angDeg := math.Atan2(dy, dx) * 180 / math.Pi
-	fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n2.5\n  1\n%.3f\n 50\n%f\n",
-		e.Layer, midX, -midY+2, dist, angDeg)
+	px, py := -uy, ux
+	off := e.CX
+	d1x, d1y := e.X1+px*off, e.Y1+py*off
+	d2x, d2y := e.X2+px*off, e.Y2+py*off
+	dxfLine(sb, e.Layer, e.X1, e.Y1, d1x, d1y)
+	dxfLine(sb, e.Layer, e.X2, e.Y2, d2x, d2y)
+	dxfLine(sb, e.Layer, d1x, d1y, d2x, d2y)
+	dxfArrowLine(sb, e.Layer, d1x, d1y, d2x-d1x, d2y-d1y)
+	dxfArrowLine(sb, e.Layer, d2x, d2y, d1x-d2x, d1y-d2y)
+	dxfText(sb, e.Layer, (d1x+d2x)/2, (d1y+d2y)/2+2, 2.5, fmt.Sprintf("%.3f", dist), "Standard")
 }
 
-// dxfAngularDim emits an angular dimension arc between two rays from a vertex.
-func dxfAngularDim(sb *strings.Builder, e Entity) {
-	// Compute angles of the two rays.
+func dxfAngularDimLines(sb *strings.Builder, e Entity) {
 	ang1 := math.Atan2(e.Y1-e.CY, e.X1-e.CX)
 	ang2 := math.Atan2(e.Y2-e.CY, e.X2-e.CX)
-
-	// Draw arc approximation with 16 segments.
 	r := e.R
 	if r <= 0 {
-		r = math.Min(math.Hypot(e.X1-e.CX, e.Y1-e.CY),
-			math.Hypot(e.X2-e.CX, e.Y2-e.CY)) * 0.5
+		r = math.Min(math.Hypot(e.X1-e.CX, e.Y1-e.CY), math.Hypot(e.X2-e.CX, e.Y2-e.CY)) * 0.5
 	}
 	span := ang2 - ang1
 	if span < 0 {
@@ -631,53 +1006,37 @@ func dxfAngularDim(sb *strings.Builder, e Entity) {
 	for k := 1; k <= nArc; k++ {
 		a := ang1 + float64(k)/float64(nArc)*span
 		cur := [2]float64{e.CX + r*math.Cos(a), e.CY + r*math.Sin(a)}
-		fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-			e.Layer, prev[0], -prev[1], cur[0], -cur[1])
+		dxfLine(sb, e.Layer, prev[0], prev[1], cur[0], cur[1])
 		prev = cur
 	}
-	// Leader lines from vertex.
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, e.CX, -e.CY, e.CX+r*math.Cos(ang1), -(e.CY+r*math.Sin(ang1)))
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, e.CX, -e.CY, e.CX+r*math.Cos(ang2), -(e.CY+r*math.Sin(ang2)))
-	// Angle text at mid-arc.
+	dxfLine(sb, e.Layer, e.CX, e.CY, e.CX+r*math.Cos(ang1), e.CY+r*math.Sin(ang1))
+	dxfLine(sb, e.Layer, e.CX, e.CY, e.CX+r*math.Cos(ang2), e.CY+r*math.Sin(ang2))
 	midAng := ang1 + span/2
 	angDeg := span * 180 / math.Pi
-	fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n2.5\n  1\n%.1f°\n 50\n0.0\n",
-		e.Layer, e.CX+r*1.3*math.Cos(midAng), -(e.CY+r*1.3*math.Sin(midAng)), angDeg)
+	tx := e.CX + r*1.3*math.Cos(midAng)
+	ty := e.CY + r*1.3*math.Sin(midAng)
+	dxfText(sb, e.Layer, tx, ty, 2.5, fmt.Sprintf("%.1f°", angDeg), "Standard")
 }
 
-// dxfRadialDim emits a radial dimension leader line.
-func dxfRadialDim(sb *strings.Builder, e Entity) {
+func dxfRadialDimLines(sb *strings.Builder, e Entity) {
 	ang := e.RotDeg * math.Pi / 180
 	px := e.CX + e.R*math.Cos(ang)
 	py := e.CY + e.R*math.Sin(ang)
-	// Leader from center to circumference.
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, e.CX, -e.CY, px, -py)
-	arrowLine(sb, e.Layer, px, py, px-e.CX, py-e.CY)
-	// Text just outside.
-	tx := e.CX + (e.R+4)*math.Cos(ang)
-	ty := e.CY + (e.R+4)*math.Sin(ang)
-	fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n2.5\n  1\nR%.3f\n 50\n0.0\n",
-		e.Layer, tx, -ty, e.R)
+	dxfLine(sb, e.Layer, e.CX, e.CY, px, py)
+	dxfArrowLine(sb, e.Layer, px, py, px-e.CX, py-e.CY)
+	dxfText(sb, e.Layer, e.CX+(e.R+4)*math.Cos(ang), e.CY+(e.R+4)*math.Sin(ang), 2.5,
+		fmt.Sprintf("R%.3f", e.R), "Standard")
 }
 
-// dxfDiameterDim emits a diameter dimension with two-sided leader.
-func dxfDiameterDim(sb *strings.Builder, e Entity) {
+func dxfDiameterDimLines(sb *strings.Builder, e Entity) {
 	ang := e.RotDeg * math.Pi / 180
 	p1x := e.CX + e.R*math.Cos(ang)
 	p1y := e.CY + e.R*math.Sin(ang)
 	p2x := e.CX - e.R*math.Cos(ang)
 	p2y := e.CY - e.R*math.Sin(ang)
-	// Diameter line through center.
-	fmt.Fprintf(sb, "  0\nLINE\n  8\n%d\n 10\n%f\n 20\n%f\n 11\n%f\n 21\n%f\n",
-		e.Layer, p1x, -p1y, p2x, -p2y)
-	arrowLine(sb, e.Layer, p1x, p1y, p1x-p2x, p1y-p2y)
-	arrowLine(sb, e.Layer, p2x, p2y, p2x-p1x, p2y-p1y)
-	// Text at center+offset.
-	tx := e.CX + (e.R+4)*math.Cos(ang)
-	ty := e.CY + (e.R+4)*math.Sin(ang)
-	fmt.Fprintf(sb, "  0\nTEXT\n  8\n%d\n 10\n%f\n 20\n%f\n 30\n0.0\n 40\n2.5\n  1\n⌀%.3f\n 50\n0.0\n",
-		e.Layer, tx, -ty, 2*e.R)
+	dxfLine(sb, e.Layer, p1x, p1y, p2x, p2y)
+	dxfArrowLine(sb, e.Layer, p1x, p1y, p1x-p2x, p1y-p2y)
+	dxfArrowLine(sb, e.Layer, p2x, p2y, p2x-p1x, p2y-p1y)
+	dxfText(sb, e.Layer, e.CX+(e.R+4)*math.Cos(ang), e.CY+(e.R+4)*math.Sin(ang), 2.5,
+		fmt.Sprintf("⌀%.3f", 2*e.R), "Standard")
 }
