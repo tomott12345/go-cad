@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -60,8 +61,7 @@ func New(cfg Config) *Loader {
 }
 
 // Discover returns the paths of all loadable plugin files found in the
-// configured directories (.so files and executables without extension on
-// Unix, or .exe on Windows).
+// configured directories (.so files and executables).
 func (l *Loader) Discover() []string {
 	var found []string
 	for _, dir := range l.cfg.Dirs {
@@ -76,6 +76,7 @@ func (l *Loader) Discover() []string {
 			name := e.Name()
 			if l.cfg.EnableSO && strings.HasSuffix(name, ".so") {
 				found = append(found, filepath.Join(dir, name))
+				continue
 			}
 			if l.cfg.EnableSubprocess && isExecutable(e, dir) {
 				found = append(found, filepath.Join(dir, name))
@@ -85,7 +86,7 @@ func (l *Loader) Discover() []string {
 	return found
 }
 
-// LoadAll loads every discovered plugin into host.  Errors for individual
+// LoadAll loads every discovered plugin into host. Errors for individual
 // plugins are collected and returned together; a partial load is still
 // considered a success.
 func (l *Loader) LoadAll(host interface {
@@ -111,9 +112,10 @@ func (l *Loader) LoadAll(host interface {
 	return errs
 }
 
-// isExecutable reports whether the directory entry is an executable file
-// (non-.so, non-directory).
-func isExecutable(e os.DirEntry, dir string) bool {
+// isExecutable reports whether the directory entry is an executable plugin.
+// On Windows, plugins must have a .exe extension.
+// On Unix/macOS, the execute bit must be set.
+func isExecutable(e os.DirEntry, _ string) bool {
 	if e.IsDir() {
 		return false
 	}
@@ -121,11 +123,14 @@ func isExecutable(e os.DirEntry, dir string) bool {
 	if strings.HasSuffix(name, ".so") {
 		return false
 	}
+	if runtime.GOOS == "windows" {
+		return strings.HasSuffix(strings.ToLower(name), ".exe")
+	}
+	// Unix: check execute bit.
 	info, err := e.Info()
 	if err != nil {
 		return false
 	}
-	// On Unix, check the execute bit.
 	return info.Mode()&0o111 != 0
 }
 
@@ -144,21 +149,22 @@ type rpcMsg struct {
 // SubprocessPlugin wraps a subprocess that communicates via newline-delimited
 // JSON-RPC 2.0 over stdin/stdout.
 //
-// Host→Plugin protocol:
+// # Host → Plugin protocol (host sends via subprocess stdin)
 //
 //	{"jsonrpc":"2.0","method":"plugin.name","id":1}
 //	{"jsonrpc":"2.0","method":"plugin.version","id":2}
 //	{"jsonrpc":"2.0","method":"plugin.register","id":3}
-//	{"jsonrpc":"2.0","method":"plugin.unregister","id":4}
+//	{"jsonrpc":"2.0","method":"plugin.command","params":{"command":"DIM","args":["0,0","100,0"]},"id":4}
+//	{"jsonrpc":"2.0","method":"plugin.unregister","id":5}
 //
-// Plugin→Host reverse calls (during plugin.register handling):
+// # Plugin → Host reverse calls (interleaved within any request)
 //
 //	{"jsonrpc":"2.0","method":"host.addEntity","params":{...},"id":10}
 //	{"jsonrpc":"2.0","method":"host.registerCommand","params":{...},"id":11}
+//	{"jsonrpc":"2.0","method":"host.registerTool","params":{...},"id":12}
 //
-// After all reverse calls the plugin sends its response to the pending call:
-//
-//	{"jsonrpc":"2.0","result":null,"id":3}
+// The host processes all reverse calls before accepting the plugin's final
+// response to the pending request.
 type SubprocessPlugin struct {
 	path    string
 	name    string
@@ -196,20 +202,20 @@ func LoadSubprocess(path string) (plugin.Plugin, error) {
 		enc:     json.NewEncoder(stdin),
 	}
 
-	// Query name and version.
-	nameStr, err := sp.call("plugin.name", nil)
+	// Query name and version (simple call — no reverse calls expected here).
+	nameRaw, err := sp.call("plugin.name", nil)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("subprocess: plugin.name: %w", err)
 	}
-	_ = json.Unmarshal(nameStr, &sp.name)
+	_ = json.Unmarshal(nameRaw, &sp.name)
 
-	verStr, err := sp.call("plugin.version", nil)
+	verRaw, err := sp.call("plugin.version", nil)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("subprocess: plugin.version: %w", err)
 	}
-	_ = json.Unmarshal(verStr, &sp.version)
+	_ = json.Unmarshal(verRaw, &sp.version)
 
 	return sp, nil
 }
@@ -221,154 +227,145 @@ func (sp *SubprocessPlugin) Version() string { return sp.version }
 // subprocess makes before it sends its response.
 func (sp *SubprocessPlugin) Register(api plugin.HostAPI) error {
 	sp.api = api
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	id := sp.idSeq.Add(1)
-	if err := sp.enc.Encode(rpcMsg{JSONRPC: "2.0", Method: "plugin.register", ID: id}); err != nil {
-		return err
-	}
-	return sp.readUntilResponse(id)
+	_, err := sp.call("plugin.register", nil)
+	return err
 }
 
 // Unregister sends "plugin.unregister" and terminates the subprocess.
 func (sp *SubprocessPlugin) Unregister() error {
 	sp.mu.Lock()
-	id := sp.idSeq.Add(1)
-	_ = sp.enc.Encode(rpcMsg{JSONRPC: "2.0", Method: "plugin.unregister", ID: id})
+	_, _ = sp.call("plugin.unregister", nil)
 	sp.mu.Unlock()
 	_ = sp.stdin.Close()
 	return sp.cmd.Wait()
 }
 
-// call sends a JSON-RPC request and returns the raw result bytes.
+// call sends a JSON-RPC request identified by a unique ID and reads the
+// subprocess stdout, processing any interleaved reverse calls (host.addEntity
+// etc.) until it sees the matching response.
+//
+// This single method handles all command dispatch correctly — reverse calls
+// made by the subprocess during command execution are processed inline before
+// the final response is returned to the caller.
 func (sp *SubprocessPlugin) call(method string, params any) (json.RawMessage, error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
 	id := sp.idSeq.Add(1)
-	var raw json.RawMessage
+	var rawParams json.RawMessage
 	if params != nil {
 		var err error
-		raw, err = json.Marshal(params)
+		rawParams, err = json.Marshal(params)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err := sp.enc.Encode(rpcMsg{JSONRPC: "2.0", Method: method, Params: raw, ID: id}); err != nil {
+	if err := sp.enc.Encode(rpcMsg{JSONRPC: "2.0", Method: method, Params: rawParams, ID: id}); err != nil {
 		return nil, err
 	}
-	if !sp.scanner.Scan() {
-		return nil, fmt.Errorf("subprocess: read response: %w", sp.scanner.Err())
-	}
-	var resp rpcMsg
-	if err := json.Unmarshal(sp.scanner.Bytes(), &resp); err != nil {
-		return nil, err
-	}
-	if resp.Error != "" {
-		return nil, fmt.Errorf("subprocess: %s", resp.Error)
-	}
-	return resp.Result, nil
-}
 
-// readUntilResponse handles interleaved reverse calls from the subprocess until
-// the response with the given id arrives.
-func (sp *SubprocessPlugin) readUntilResponse(pendingID int64) error {
+	// Read messages until we see our response; process interleaved reverse calls.
 	for sp.scanner.Scan() {
 		var msg rpcMsg
 		if err := json.Unmarshal(sp.scanner.Bytes(), &msg); err != nil {
-			return err
+			return nil, err
 		}
-		// If it's the response to our pending call, we're done.
-		if msg.ID == pendingID && msg.Method == "" {
+		// Our response has a matching ID and no Method field.
+		if msg.ID == id && msg.Method == "" {
 			if msg.Error != "" {
-				return fmt.Errorf("subprocess: %s", msg.Error)
+				return nil, fmt.Errorf("subprocess: %s", msg.Error)
 			}
-			return nil
+			return msg.Result, nil
 		}
-		// Otherwise it's a reverse call from the plugin to the host.
+		// Interleaved reverse call from the subprocess.
 		if err := sp.handleReverseCall(msg); err != nil {
-			// Respond with error and continue.
-			_ = sp.enc.Encode(rpcMsg{
-				JSONRPC: "2.0", Error: err.Error(), ID: msg.ID,
-			})
+			_ = sp.enc.Encode(rpcMsg{JSONRPC: "2.0", Error: err.Error(), ID: msg.ID})
 		}
 	}
-	return sp.scanner.Err()
+	return nil, fmt.Errorf("subprocess: connection closed: %w", sp.scanner.Err())
 }
 
-// handleReverseCall executes a HostAPI call requested by the subprocess.
+// handleReverseCall executes a HostAPI call requested by the subprocess and
+// writes the response.
 func (sp *SubprocessPlugin) handleReverseCall(msg rpcMsg) error {
 	if sp.api == nil {
-		return fmt.Errorf("no host API available")
+		return sp.enc.Encode(rpcMsg{JSONRPC: "2.0", Error: "no host API available", ID: msg.ID})
 	}
-	var respResult json.RawMessage
-	var respErr string
+	var result json.RawMessage
+	var errStr string
 
 	switch msg.Method {
 	case "host.addEntity":
 		var e plugin.Entity
 		if err := json.Unmarshal(msg.Params, &e); err != nil {
-			respErr = err.Error()
+			errStr = err.Error()
 		} else {
 			id, err := sp.api.AddEntity(e)
 			if err != nil {
-				respErr = err.Error()
+				errStr = err.Error()
 			} else {
-				respResult, _ = json.Marshal(id)
+				result, _ = json.Marshal(id)
 			}
 		}
+
 	case "host.deleteEntity":
 		var id int
 		if err := json.Unmarshal(msg.Params, &id); err != nil {
-			respErr = err.Error()
+			errStr = err.Error()
 		} else {
 			ok := sp.api.DeleteEntity(id)
-			respResult, _ = json.Marshal(ok)
+			result, _ = json.Marshal(ok)
 		}
+
+	case "host.registerTool":
+		var td plugin.ToolDescriptor
+		if err := json.Unmarshal(msg.Params, &td); err != nil {
+			errStr = err.Error()
+		} else if err := sp.api.RegisterTool(td); err != nil {
+			errStr = err.Error()
+		} else {
+			result = json.RawMessage(`null`)
+		}
+
 	case "host.registerCommand":
-		// Subprocess registers a command: only name/aliases are useful here;
-		// the actual handler is the subprocess itself.
+		// The subprocess registers a command by name/aliases. When the host
+		// later executes it, it sends "plugin.command" back to the subprocess.
 		var cd struct {
 			Name    string   `json:"name"`
 			Aliases []string `json:"aliases"`
 		}
 		if err := json.Unmarshal(msg.Params, &cd); err != nil {
-			respErr = err.Error()
+			errStr = err.Error()
 		} else {
-			cmdRef := cd.Name // capture
+			cmdName := cd.Name // capture for closure
 			err := sp.api.RegisterCommand(plugin.CommandDescriptor{
 				Name:    cd.Name,
 				Aliases: cd.Aliases,
 				Handler: func(args []string) error {
-					params, _ := json.Marshal(args)
-					_, err := sp.call("host.command."+cmdRef, params)
+					// Invoke the command on the subprocess via "plugin.command".
+					type cmdReq struct {
+						Command string   `json:"command"`
+						Args    []string `json:"args"`
+					}
+					_, err := sp.call("plugin.command", cmdReq{Command: cmdName, Args: args})
 					return err
 				},
 			})
 			if err != nil {
-				respErr = err.Error()
+				errStr = err.Error()
 			} else {
-				respResult = json.RawMessage(`null`)
+				result = json.RawMessage(`null`)
 			}
 		}
-	case "host.registerTool":
-		var td plugin.ToolDescriptor
-		if err := json.Unmarshal(msg.Params, &td); err != nil {
-			respErr = err.Error()
-		} else if err := sp.api.RegisterTool(td); err != nil {
-			respErr = err.Error()
-		} else {
-			respResult = json.RawMessage(`null`)
-		}
+
 	default:
-		respErr = fmt.Sprintf("unknown host method: %s", msg.Method)
+		errStr = fmt.Sprintf("unknown host method: %s", msg.Method)
 	}
 
 	return sp.enc.Encode(rpcMsg{
 		JSONRPC: "2.0",
-		Result:  respResult,
-		Error:   respErr,
+		Result:  result,
+		Error:   errStr,
 		ID:      msg.ID,
 	})
 }

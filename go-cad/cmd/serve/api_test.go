@@ -12,6 +12,7 @@ import (
 
         "go-cad/internal/document"
         "go-cad/internal/pluginhost"
+        pluginpkg "go-cad/pkg/plugin"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -324,6 +325,34 @@ func TestPostCommand_NotFound(t *testing.T) {
         })
         if rec.Code != http.StatusNotFound {
                 t.Fatalf("expected 404, got %d", rec.Code)
+        }
+}
+
+func TestPostCommand_Success(t *testing.T) {
+        h, mux := newTestAPI()
+        // Register a command through the host.
+        called := false
+        _ = h.host.RegisterCommand(pluginpkg.CommandDescriptor{
+                Name: "TESTCMD",
+                Handler: func(args []string) error {
+                        called = true
+                        return nil
+                },
+        })
+        rec := doRequest(t, mux, http.MethodPost, "/api/v1/command", map[string]any{
+                "command": "TESTCMD",
+                "args":    []string{"arg1"},
+        })
+        if rec.Code != http.StatusOK {
+                t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body)
+        }
+        var result map[string]bool
+        decodeBody(t, rec, &result)
+        if !result["ok"] {
+                t.Error("expected ok=true")
+        }
+        if !called {
+                t.Error("command handler not called")
         }
 }
 

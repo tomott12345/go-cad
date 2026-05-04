@@ -279,8 +279,8 @@ paths:
                 type: object
                 properties:
                   ok:
-                    type: string
-              example: {ok: "true"}
+                    type: boolean
+              example: {ok: true}
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":

@@ -26,6 +26,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"go-cad/pkg/plugin"
 )
@@ -93,39 +94,33 @@ func (d *DimensionPlugin) handleDIM(args []string) error {
 
 	// Dimension line is drawn 20 units above the measured points.
 	offset := 20.0
-
-	// Witness lines (from measured points up to the dimension line).
-	_, err = d.api.AddEntity(plugin.Entity{
-		Type: "line",
-		X1: x1, Y1: y1,
-		X2: x1, Y2: y1 - offset,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = d.api.AddEntity(plugin.Entity{
-		Type: "line",
-		X1: x2, Y1: y2,
-		X2: x2, Y2: y2 - offset,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Main dimension line with arrow ticks.
 	dimY := math.Min(y1, y2) - offset
 	tickSize := 5.0
+
+	// Witness lines (from measured points up to the dimension line).
+	if _, err := d.api.AddEntity(plugin.Entity{
+		Type: "line", X1: x1, Y1: y1, X2: x1, Y2: dimY,
+	}); err != nil {
+		return err
+	}
+	if _, err := d.api.AddEntity(plugin.Entity{
+		Type: "line", X1: x2, Y1: y2, X2: x2, Y2: dimY,
+	}); err != nil {
+		return err
+	}
+
+	// Main dimension line with arrow ticks at each end.
 	_, err = d.api.AddEntity(plugin.Entity{
 		Type: "polyline",
 		Points: [][]float64{
-			{x1 + tickSize, dimY - tickSize / 2},
+			{x1 + tickSize, dimY - tickSize/2},
 			{x1, dimY},
-			{x1 + tickSize, dimY + tickSize / 2},
+			{x1 + tickSize, dimY + tickSize/2},
 			{x1, dimY},
 			{x2, dimY},
-			{x2 - tickSize, dimY - tickSize / 2},
+			{x2 - tickSize, dimY - tickSize/2},
 			{x2, dimY},
-			{x2 - tickSize, dimY + tickSize / 2},
+			{x2 - tickSize, dimY + tickSize/2},
 		},
 	})
 	return err
@@ -152,6 +147,9 @@ func parsePoint(s string) (float64, float64, error) {
 //
 // When loaded as a subprocess (not a .so), this main() function drives the
 // JSON-RPC protocol described in PLUGIN_SDK.md.
+//
+// The subprocess stores registered command handlers locally so it can dispatch
+// them when the host sends "plugin.command".
 
 type rpcMsg struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -167,8 +165,13 @@ func main() {
 	enc := json.NewEncoder(os.Stdout)
 	scanner := bufio.NewScanner(os.Stdin)
 
-	// hostAPI proxies calls back to the host via JSON-RPC.
-	hostProxy := &subprocessHostAPI{enc: enc, scanner: scanner}
+	// hostProxy proxies HostAPI calls back to the host via JSON-RPC.
+	// It also stores registered command handlers so plugin.command can dispatch them.
+	hostProxy := &subprocessHostAPI{
+		enc:      enc,
+		scanner:  scanner,
+		commands: make(map[string]func([]string) error),
+	}
 
 	for scanner.Scan() {
 		var msg rpcMsg
@@ -200,6 +203,27 @@ func main() {
 				result = json.RawMessage(`null`)
 			}
 
+		case "plugin.command":
+			// The host is invoking a command registered by this plugin.
+			var body struct {
+				Command string   `json:"command"`
+				Args    []string `json:"args"`
+			}
+			if err := json.Unmarshal(msg.Params, &body); err != nil {
+				errStr = err.Error()
+			} else {
+				hostProxy.mu.RLock()
+				handler, ok := hostProxy.commands[body.Command]
+				hostProxy.mu.RUnlock()
+				if !ok {
+					errStr = fmt.Sprintf("unknown command: %s", body.Command)
+				} else if err := handler(body.Args); err != nil {
+					errStr = err.Error()
+				} else {
+					result = json.RawMessage(`null`)
+				}
+			}
+
 		default:
 			errStr = fmt.Sprintf("unknown method: %s", msg.Method)
 		}
@@ -215,10 +239,16 @@ func main() {
 
 // ─── Subprocess HostAPI proxy ─────────────────────────────────────────────────
 
+// subprocessHostAPI implements plugin.HostAPI by sending reverse JSON-RPC calls
+// to the host over stdout and reading their responses from stdin.
+// It also maintains a local registry of command handlers so that plugin.command
+// dispatch works correctly.
 type subprocessHostAPI struct {
-	enc     *json.Encoder
-	scanner *bufio.Scanner
-	idSeq   int64
+	enc      *json.Encoder
+	scanner  *bufio.Scanner
+	idSeq    int64
+	mu       sync.RWMutex
+	commands map[string]func([]string) error
 }
 
 func (h *subprocessHostAPI) nextID() int64 {
@@ -239,14 +269,14 @@ func (h *subprocessHostAPI) call(method string, params any) (json.RawMessage, er
 		return nil, err
 	}
 	if !h.scanner.Scan() {
-		return nil, fmt.Errorf("subprocess: host closed connection")
+		return nil, fmt.Errorf("host closed connection")
 	}
 	var resp rpcMsg
 	if err := json.Unmarshal(h.scanner.Bytes(), &resp); err != nil {
 		return nil, err
 	}
 	if resp.Error != "" {
-		return nil, fmt.Errorf("host: %s", resp.Error)
+		return nil, fmt.Errorf("host error: %s", resp.Error)
 	}
 	return resp.Result, nil
 }
@@ -280,13 +310,23 @@ func (h *subprocessHostAPI) RegisterTool(td plugin.ToolDescriptor) error {
 	return err
 }
 
+// RegisterCommand sends the command descriptor to the host AND stores the
+// handler locally so it can be dispatched when "plugin.command" arrives.
 func (h *subprocessHostAPI) RegisterCommand(cd plugin.CommandDescriptor) error {
 	type cmdPayload struct {
 		Name    string   `json:"name"`
 		Aliases []string `json:"aliases"`
 	}
-	_, err := h.call("host.registerCommand", cmdPayload{Name: cd.Name, Aliases: cd.Aliases})
-	return err
+	if _, err := h.call("host.registerCommand", cmdPayload{Name: cd.Name, Aliases: cd.Aliases}); err != nil {
+		return err
+	}
+	h.mu.Lock()
+	h.commands[cd.Name] = cd.Handler
+	for _, alias := range cd.Aliases {
+		h.commands[alias] = cd.Handler
+	}
+	h.mu.Unlock()
+	return nil
 }
 
 func (h *subprocessHostAPI) Subscribe(_ plugin.EventKind, _ plugin.EventHandler) string {
