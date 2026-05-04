@@ -25,8 +25,10 @@ body{display:flex;flex-direction:column;height:100vh;background:#1e1e1e;color:#c
 #block-list{overflow-y:auto;flex:1;padding:8px}
 .block-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #333;font-size:12px;color:#ccc}
 .block-item:hover{background:#2a2a2a}
-.block-name{flex:1;font-weight:600;color:#ddd}
-.block-meta{color:#888;font-size:11px;flex:0 0 120px}
+.block-thumb{width:72px;height:54px;flex:0 0 72px;background:#111;border:1px solid #444;border-radius:3px}
+.block-info{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.block-name{font-weight:600;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.block-meta{color:#888;font-size:11px}
 .block-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:#3a3a3a;color:#ccc;cursor:pointer}
 .block-insert-btn:hover{background:#0078d4;border-color:#0060a8;color:#fff}
 #block-panel-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
@@ -1033,7 +1035,7 @@ cmdInput.addEventListener('keydown', e=>{
     // Use first entity's position as base point.
     const bx=0, by=0;
     const ok=window.cadDefineBlock(bname,bx,by,JSON.stringify(ids));
-    if(ok) setStatus(`Block "${bname}" defined with ${ids.length} entity(s).`);
+    if(ok){ invalidateBlockCache(bname); setStatus(`Block "${bname}" defined with ${ids.length} entity(s).`); }
     else setStatus(`DEFINEBLOCK failed — ensure entity IDs exist.`);
     render(); cmdInput.value=''; return;
   }
@@ -1233,6 +1235,7 @@ Object.keys(SNAP_BITS).forEach(id=>{
 // ─── Task #7: Block Manager ───────────────────────────────────────────────────
 function openBlockManager(){
   if(!wasmReady){ setStatus('WASM not ready'); return; }
+  invalidateBlockCache(); // refresh so newly-defined blocks are reflected
   const blocks = JSON.parse(window.cadGetBlocks()||'[]');
   const list = document.getElementById('block-list');
   if(blocks.length===0){
@@ -1240,16 +1243,82 @@ function openBlockManager(){
   } else {
     list.innerHTML = blocks.map(b=>`
       <div class="block-item">
-        <span class="block-name">${escH(b.name)}</span>
-        <span class="block-meta">${b.count} ent.</span>
+        <canvas class="block-thumb" data-block="${escH(b.name)}" width="72" height="54" title="${escH(b.name)}"></canvas>
+        <div class="block-info">
+          <span class="block-name">${escH(b.name)}</span>
+          <span class="block-meta">${b.count} ent. &nbsp;base(${b.baseX.toFixed(1)},${b.baseY.toFixed(1)})</span>
+        </div>
         <button class="block-insert-btn" data-block="${escH(b.name)}">Insert</button>
       </div>`).join('');
+    // Draw preview thumbnails on each mini canvas.
+    list.querySelectorAll('.block-thumb').forEach(cv=>{
+      drawBlockPreview(cv, cv.dataset.block);
+    });
     // Wire Insert buttons via event delegation — no inline onclick (avoids XSS/quoting issues).
     list.querySelectorAll('.block-insert-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>promptInsertBlock(btn.dataset.block));
     });
   }
   document.getElementById('block-modal').classList.add('open');
+}
+
+// drawBlockPreview renders block-local entities onto a mini thumbnail canvas.
+function drawBlockPreview(canvas, blockName) {
+  const ents = getBlockEntities(blockName);
+  const ctx2 = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx2.clearRect(0,0,W,H);
+  if(!ents || ents.length===0) {
+    ctx2.fillStyle='#555'; ctx2.font='9px sans-serif'; ctx2.textAlign='center';
+    ctx2.fillText('(empty)',W/2,H/2+3); return;
+  }
+  // Compute bounding box of all entities in block-local coords.
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  function bboxPt(x,y){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
+  ents.forEach(be=>{
+    switch(be.type){
+      case 'line': bboxPt(be.x1,be.y1); bboxPt(be.x2,be.y2); break;
+      case 'circle': case 'arc':
+        bboxPt(be.cx-be.r,be.cy-be.r); bboxPt(be.cx+be.r,be.cy+be.r); break;
+      case 'text': bboxPt(be.x1,be.y1); break;
+      default:
+        (be.points||[]).forEach(p=>bboxPt(p[0],p[1]));
+    }
+  });
+  if(!isFinite(minX)){ ctx2.fillStyle='#555'; ctx2.font='9px sans-serif'; ctx2.textAlign='center'; ctx2.fillText('?',W/2,H/2); return; }
+  const pad=4;
+  const rangeX=maxX-minX||1, rangeY=maxY-minY||1;
+  const sc=Math.min((W-pad*2)/rangeX,(H-pad*2)/rangeY);
+  // Map block-local → thumbnail canvas coords.
+  function toThumb(x,y){ return [pad+(x-minX)*sc, H-pad-(y-minY)*sc]; }
+
+  ctx2.strokeStyle='#7ec8e3'; ctx2.fillStyle='#7ec8e3'; ctx2.lineWidth=1;
+  ents.forEach(be=>{
+    switch(be.type){
+      case 'line': {
+        const[ax,ay]=toThumb(be.x1,be.y1),[bx,by]=toThumb(be.x2,be.y2);
+        ctx2.beginPath(); ctx2.moveTo(ax,ay); ctx2.lineTo(bx,by); ctx2.stroke(); break;
+      }
+      case 'circle': {
+        const[cx2,cy2]=toThumb(be.cx,be.cy);
+        ctx2.beginPath(); ctx2.arc(cx2,cy2,be.r*sc,0,2*Math.PI); ctx2.stroke(); break;
+      }
+      case 'arc': {
+        const[cx2,cy2]=toThumb(be.cx,be.cy);
+        ctx2.beginPath();
+        ctx2.arc(cx2,cy2,be.r*sc,-be.startDeg*Math.PI/180,-be.endDeg*Math.PI/180,false);
+        ctx2.stroke(); break;
+      }
+      default: {
+        const pts2=be.points||[];
+        if(pts2.length<2) break;
+        const[fx,fy]=toThumb(pts2[0][0],pts2[0][1]);
+        ctx2.beginPath(); ctx2.moveTo(fx,fy);
+        for(let j=1;j<pts2.length;j++){ const[px,py]=toThumb(pts2[j][0],pts2[j][1]); ctx2.lineTo(px,py); }
+        ctx2.stroke();
+      }
+    }
+  });
 }
 function closeBlockManager(){
   document.getElementById('block-modal').classList.remove('open');
@@ -1648,21 +1717,106 @@ function drawEntity(e,sel=false){
 
 // ── Task #7 entity renderers ──────────────────────────────────────────────────
 
+// Block entity cache: blockName → Entity[]  (refreshed when modal opens / WASM loads)
+const _blockEntCache = {};
+function getBlockEntities(name) {
+  if (!wasmReady || !window.cadGetBlockEntities) return [];
+  if (!_blockEntCache[name]) {
+    try { _blockEntCache[name] = JSON.parse(window.cadGetBlockEntities(name) || '[]'); }
+    catch(_) { _blockEntCache[name] = []; }
+  }
+  return _blockEntCache[name];
+}
+function invalidateBlockCache(name) { if(name) delete _blockEntCache[name]; else Object.keys(_blockEntCache).forEach(k=>delete _blockEntCache[k]); }
+
 function drawBlockRef(c2, e, col, sel) {
-  // Render the block's constituent entities with the insertion transform applied.
-  // For the browser renderer we just draw a placeholder cross + bounding box.
-  const [sx, sy] = w2s(e.x1, e.y1);
-  const sz = 12;
+  // Apply the INSERT transform: translate to insertion point, scale, rotate,
+  // then draw each block-local entity in world space via w2s().
+  const name = e.text || '';
+  const ix = e.x1, iy = e.y1;       // insertion point (world coords)
+  const sx = e.r  || 1, sy2= e.r2 || 1; // scaleX, scaleY
+  const rot = (e.rotDeg || 0) * Math.PI / 180;
+  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+
+  // Transform block-local point to world coords.
+  function localToWorld(lx, ly) {
+    return [
+      ix + lx * sx * cosR - ly * sy2 * sinR,
+      iy + lx * sx * sinR + ly * sy2 * cosR
+    ];
+  }
+
+  const ents = getBlockEntities(name);
+  const strokeCol = sel ? '#ff9800' : col;
+
+  if (ents.length === 0) {
+    // Fallback: draw insertion cross if block has no cached entities yet.
+    const [scx, scy] = w2s(ix, iy);
+    const sz = 10;
+    c2.save();
+    c2.strokeStyle = strokeCol; c2.lineWidth = sel ? 2 : 1;
+    c2.beginPath(); c2.moveTo(scx-sz,scy); c2.lineTo(scx+sz,scy); c2.stroke();
+    c2.beginPath(); c2.moveTo(scx,scy-sz); c2.lineTo(scx,scy+sz); c2.stroke();
+    c2.fillStyle = strokeCol; c2.font='9px monospace'; c2.textAlign='left';
+    c2.fillText(name||'?', scx+sz+2, scy-2);
+    c2.restore();
+    return;
+  }
+
   c2.save();
-  c2.strokeStyle = sel ? '#ff9800' : col;
-  c2.lineWidth = sel ? 2 : 1;
-  c2.beginPath(); c2.moveTo(sx-sz,sy); c2.lineTo(sx+sz,sy); c2.stroke();
-  c2.beginPath(); c2.moveTo(sx,sy-sz); c2.lineTo(sx,sy+sz); c2.stroke();
-  // Label
-  c2.fillStyle = sel ? '#ff9800' : col;
-  c2.font = `${Math.max(9,10*zoom)}px monospace`;
-  c2.textAlign = 'left';
-  c2.fillText(e.text||'*', sx+sz+3, sy-3);
+  c2.strokeStyle = strokeCol; c2.fillStyle = strokeCol;
+  c2.lineWidth = sel ? 2 : 1; c2.setLineDash([]);
+
+  ents.forEach(be => {
+    switch(be.type) {
+      case 'line': {
+        const [ax,ay] = w2s(...localToWorld(be.x1, be.y1));
+        const [bx,by] = w2s(...localToWorld(be.x2, be.y2));
+        c2.beginPath(); c2.moveTo(ax,ay); c2.lineTo(bx,by); c2.stroke();
+        break;
+      }
+      case 'circle': {
+        const [cx2,cy2] = w2s(...localToWorld(be.cx, be.cy));
+        const rScr = be.r * sx * zoom;
+        c2.beginPath(); c2.arc(cx2,cy2,Math.abs(rScr),0,2*Math.PI); c2.stroke();
+        break;
+      }
+      case 'arc': {
+        const [cx2,cy2] = w2s(...localToWorld(be.cx, be.cy));
+        const rScr = be.r * sx * zoom;
+        const sa = -(be.startDeg + (e.rotDeg||0)) * Math.PI/180;
+        const ea = -(be.endDeg   + (e.rotDeg||0)) * Math.PI/180;
+        c2.beginPath(); c2.arc(cx2,cy2,Math.abs(rScr),sa,ea); c2.stroke();
+        break;
+      }
+      case 'text': {
+        const [tx,ty] = w2s(...localToWorld(be.x1, be.y1));
+        c2.font=`${Math.max(7,(be.textHeight||2.5)*zoom)}px sans-serif`;
+        c2.textAlign='left'; c2.fillText(be.text||'', tx, ty);
+        break;
+      }
+      case 'polyline':
+      case 'polygon': {
+        const pts2 = (be.points||[]);
+        if(pts2.length<2) break;
+        c2.beginPath();
+        const[fx,fy]=w2s(...localToWorld(pts2[0][0],pts2[0][1])); c2.moveTo(fx,fy);
+        for(let j=1;j<pts2.length;j++){
+          const[px,py]=w2s(...localToWorld(pts2[j][0],pts2[j][1]));c2.lineTo(px,py);
+        }
+        if(be.type==='polygon') c2.closePath();
+        c2.stroke();
+        break;
+      }
+    }
+  });
+
+  // Insertion-point marker (small cross, dimmed)
+  const [mx,my]=w2s(ix,iy);
+  c2.globalAlpha=0.4; c2.lineWidth=0.7;
+  c2.beginPath();c2.moveTo(mx-5,my);c2.lineTo(mx+5,my);c2.stroke();
+  c2.beginPath();c2.moveTo(mx,my-5);c2.lineTo(mx,my+5);c2.stroke();
+  c2.globalAlpha=1;
   c2.restore();
 }
 

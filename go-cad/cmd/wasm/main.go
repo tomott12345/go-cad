@@ -727,6 +727,24 @@ func main() {
                 return string(byt)
         }))
 
+        // cadGetBlockEntities(name) → JSON array of Entity objects in block-local coords,
+        // or "[]" if the block is unknown. Used by the browser renderer to draw actual
+        // block geometry instead of a placeholder cross.
+        js.Global().Set("cadGetBlockEntities", js.FuncOf(func(_ js.Value, a []js.Value) any {
+                if len(a) < 1 {
+                        return "[]"
+                }
+                name := a[0].String()
+                blocks := doc.Blocks()
+                for _, b := range blocks {
+                        if b.Name == name {
+                                byt, _ := json.Marshal(b.Entities)
+                                return string(byt)
+                        }
+                }
+                return "[]"
+        }))
+
         // cadAddHatch(boundaryPtsJSON, pattern, angleDeg, scale, layer, color) → entity ID
         // boundaryPtsJSON: JSON array [[x,y],…]  pattern: "SOLID"|"ANSI31"|"ANSI32"|"DOTS"
         js.Global().Set("cadAddHatch", js.FuncOf(func(_ js.Value, a []js.Value) any {

@@ -710,10 +710,11 @@ func (d *Document) Load(path string) error {
                         d.layers = map[int]*Layer{0: defaultLayer0()}
                         d.nextLayerID = 1
                 }
-                // Task #7: restore block definitions (migration-safe: nil when absent in older saves).
-                if state.Blocks != nil {
-                        d.blocks = state.Blocks
-                }
+                // Task #7: always reset blocks from saved state.
+                // If the saved doc had no blocks (nil map), we explicitly clear
+                // d.blocks so stale definitions from a previously-open document
+                // do not leak into the newly-loaded one.
+                d.blocks = state.Blocks
                 for _, e := range d.entities {
                         if e.ID >= d.nextID {
                                 d.nextID = e.ID + 1
@@ -1088,8 +1089,22 @@ func (d *Document) exportDXF(r12 bool) string {
                                 }
                         }
 
-                case TypeRevisionCloud, TypeWipeout:
-                        // Export as closed polyline.
+                case TypeRevisionCloud:
+                        // Revision cloud: closed poly with concave arc per edge (bulge=-0.4142 ≈ 90°).
+                        pts := make([][2]float64, len(e.Points))
+                        for i, p := range e.Points {
+                                if len(p) >= 2 {
+                                        pts[i] = [2]float64{p[0], p[1]}
+                                }
+                        }
+                        if r12 {
+                                dxfR12PolylineRevCloud(&sb, ln, pts)
+                        } else {
+                                dxfLWPolylineRevCloud(&sb, ln, pts)
+                        }
+
+                case TypeWipeout:
+                        // Wipeout: plain closed polygon (no arc bulge needed).
                         pts := make([][2]float64, len(e.Points))
                         for i, p := range e.Points {
                                 if len(p) >= 2 {
@@ -1159,6 +1174,37 @@ func dxfLWPolyline(sb *strings.Builder, layer string, pts [][2]float64) {
         for _, p := range pts {
                 fmt.Fprintf(sb, " 10\n%f\n 20\n%f\n", p[0], -p[1])
         }
+}
+
+// dxfLWPolylineRevCloud emits a closed LWPOLYLINE (R2000+) with a bulge value
+// on every vertex so that CAD readers draw concave arcs between vertices —
+// the characteristic revision-cloud appearance.
+// bulge = -tan(θ/4) where θ is the included angle; -0.4142 ≈ -tan(π/8) ≈ 90°
+// clockwise (concave when the polygon is CCW).
+func dxfLWPolylineRevCloud(sb *strings.Builder, layer string, pts [][2]float64) {
+        if len(pts) < 3 {
+                return
+        }
+        const bulge = -0.4142 // concave 90° arc per edge
+        fmt.Fprintf(sb, "  0\nLWPOLYLINE\n  8\n%s\n 90\n%d\n 70\n1\n", layer, len(pts))
+        for _, p := range pts {
+                fmt.Fprintf(sb, " 10\n%f\n 20\n%f\n 42\n%f\n", p[0], -p[1], bulge)
+        }
+}
+
+// dxfR12PolylineRevCloud emits a closed POLYLINE+VERTEX+SEQEND (R12 compatible)
+// with bulge values so downstream readers render the revision-cloud arcs.
+func dxfR12PolylineRevCloud(sb *strings.Builder, layer string, pts [][2]float64) {
+        if len(pts) < 3 {
+                return
+        }
+        const bulge = -0.4142
+        fmt.Fprintf(sb, "  0\nPOLYLINE\n  8\n%s\n 66\n1\n 70\n1\n", layer)
+        for _, p := range pts {
+                fmt.Fprintf(sb, "  0\nVERTEX\n  8\n%s\n 10\n%f\n 20\n%f\n 42\n%f\n",
+                        layer, p[0], -p[1], bulge)
+        }
+        sb.WriteString("  0\nSEQEND\n")
 }
 
 // ─── Bezier approximation helper ──────────────────────────────────────────────
