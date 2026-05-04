@@ -1,0 +1,50 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "go-cad/web/**"
+      - "go-cad/cmd/wasm/**"
+      - "go-cad/internal/**"
+      - "go-cad/pkg/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: go-cad
+
+jobs:
+  deploy:
+    name: Build and deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Compile WASM
+        env:
+          GOOS: js
+          GOARCH: wasm
+        run: go build -buildvcs=false -o web/main.wasm ./cmd/wasm/
+
+      - name: Copy wasm_exec.js runtime shim
+        run: |
+          GOROOT=$(go env GOROOT)
+          cp "$GOROOT/misc/wasm/wasm_exec.js" web/wasm_exec.js
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: go-cad/web
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Deploy go-cad web app (${{ github.sha }})"
