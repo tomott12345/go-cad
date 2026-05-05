@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"go-cad/internal/document"
+	"github.com/tomott12345/go-cad/internal/document"
 )
 
 // Write exports doc as a DXF R2000 (AC1015) stream to w.

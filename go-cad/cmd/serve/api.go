@@ -7,9 +7,9 @@ import (
         "strconv"
         "strings"
 
-        "go-cad/internal/document"
-        "go-cad/internal/pluginhost"
-        "go-cad/pkg/plugin"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/pluginhost"
+        "github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // apiHandler wires the REST API to the document and plugin host.

@@ -50,11 +50,11 @@ import (
         "strconv"
         "strings"
 
-        "go-cad/internal/document"
-        "go-cad/internal/snap"
-        "go-cad/internal/symbols"
-        "go-cad/pkg/dxf"
-        "go-cad/pkg/svg"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/snap"
+        "github.com/tomott12345/go-cad/internal/symbols"
+        "github.com/tomott12345/go-cad/pkg/dxf"
+        "github.com/tomott12345/go-cad/pkg/svg"
 )
 
 func init() {

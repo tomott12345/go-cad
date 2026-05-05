@@ -149,7 +149,7 @@ The key constraint for contributors is the **shared document model**: `internal/
 
 See [PLUGIN_SDK.md](PLUGIN_SDK.md) for the complete guide to writing plugins.
 
-Plugin authors import `go-cad/pkg/plugin` which is the only stable public API surface. The `internal/` packages are not part of the public API and may change between versions.
+Plugin authors import `github.com/tomott12345/go-cad/pkg/plugin` which is the only stable public API surface. The `internal/` packages are not part of the public API and may change between versions.
 
 ---
 

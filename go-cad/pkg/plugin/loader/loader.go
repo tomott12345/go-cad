@@ -25,7 +25,7 @@ import (
         "sync"
         "sync/atomic"
 
-        "go-cad/pkg/plugin"
+        "github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // Config controls which directories are scanned and which transports are enabled.

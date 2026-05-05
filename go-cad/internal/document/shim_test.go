@@ -4,8 +4,8 @@ import (
         "math"
         "testing"
 
-        "go-cad/internal/document"
-        "go-cad/internal/geometry"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/geometry"
 )
 
 func TestShim_LineToGeometry(t *testing.T) {

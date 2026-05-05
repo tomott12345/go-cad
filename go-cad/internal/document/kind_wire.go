@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"go-cad/internal/geometry"
+	"github.com/tomott12345/go-cad/internal/geometry"
 )
 
 // Kind returns the geometry-layer kind discriminator for this entity,

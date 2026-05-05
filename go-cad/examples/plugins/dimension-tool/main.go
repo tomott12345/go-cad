@@ -28,7 +28,7 @@ import (
 	"strings"
 	"sync"
 
-	"go-cad/pkg/plugin"
+	"github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // ─── Plugin implementation ───────────────────────────────────────────────────

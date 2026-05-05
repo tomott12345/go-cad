@@ -19,9 +19,9 @@ import (
         "os"
         "path/filepath"
 
-        "go-cad/internal/document"
-        "go-cad/internal/pluginhost"
-        "go-cad/pkg/plugin/loader"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/pluginhost"
+        "github.com/tomott12345/go-cad/pkg/plugin/loader"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
         "math"
         "testing"
 
-        "go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/document"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────

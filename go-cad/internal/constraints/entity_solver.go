@@ -4,7 +4,7 @@
 package constraints
 
 import (
-	"go-cad/internal/geometry"
+	"github.com/tomott12345/go-cad/internal/geometry"
 )
 
 // EntityConstraint describes a constraint referencing named entities by index.

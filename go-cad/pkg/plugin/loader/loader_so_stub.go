@@ -5,7 +5,7 @@ package loader
 import (
 	"fmt"
 
-	"go-cad/pkg/plugin"
+	"github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // LoadSO is not available on this platform.

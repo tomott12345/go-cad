@@ -3,9 +3,9 @@ package pluginhost_test
 import (
         "testing"
 
-        "go-cad/internal/document"
-        "go-cad/internal/pluginhost"
-        "go-cad/pkg/plugin"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/pluginhost"
+        "github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"go-cad/internal/document"
-	"go-cad/internal/snap"
+	"github.com/tomott12345/go-cad/internal/document"
+	"github.com/tomott12345/go-cad/internal/snap"
 )
 
 const eps = 1e-6

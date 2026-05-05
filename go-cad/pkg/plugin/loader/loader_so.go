@@ -7,7 +7,7 @@ import (
 
 	"fmt"
 
-	"go-cad/pkg/plugin"
+	"github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // LoadSO loads a Go plugin .so file and looks up the exported `NewPlugin`

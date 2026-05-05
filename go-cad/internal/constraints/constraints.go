@@ -6,7 +6,7 @@ package constraints
 import (
         "math"
 
-        "go-cad/internal/geometry"
+        "github.com/tomott12345/go-cad/internal/geometry"
 )
 
 // ─── Constraint types ─────────────────────────────────────────────────────────

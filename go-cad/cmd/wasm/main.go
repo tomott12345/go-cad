@@ -10,12 +10,12 @@ import (
         "strings"
         "syscall/js"
 
-        "go-cad/internal/document"
-        "go-cad/internal/hatch"
-        "go-cad/internal/snap"
-        "go-cad/internal/symbols"
-        "go-cad/pkg/dxf"
-        "go-cad/pkg/svg"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/hatch"
+        "github.com/tomott12345/go-cad/internal/snap"
+        "github.com/tomott12345/go-cad/internal/symbols"
+        "github.com/tomott12345/go-cad/pkg/dxf"
+        "github.com/tomott12345/go-cad/pkg/svg"
 )
 
 // symNames is cached at startup so the JS cadGetSymbols call never re-allocates.

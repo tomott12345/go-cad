@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"go-cad/internal/document"
-	"go-cad/internal/geometry"
+	"github.com/tomott12345/go-cad/internal/document"
+	"github.com/tomott12345/go-cad/internal/geometry"
 )
 
 // ── Spline (cubic Bezier) ─────────────────────────────────────────────────────

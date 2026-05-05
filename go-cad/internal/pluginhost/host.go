@@ -10,8 +10,8 @@ import (
         "sync"
         "sync/atomic"
 
-        "go-cad/internal/document"
-        "go-cad/pkg/plugin"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // ErrCommandNotFound is returned by ExecuteCommand when no command with the

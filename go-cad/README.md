@@ -113,7 +113,7 @@ Quick scaffold:
 ```go
 package main
 
-import "go-cad/pkg/plugin"
+import "github.com/tomott12345/go-cad/pkg/plugin"
 
 type HelloPlugin struct{ api plugin.HostAPI }
 

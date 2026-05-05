@@ -3,7 +3,7 @@ package symbols
 import (
         "testing"
 
-        "go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/document"
 )
 
 func TestNamesNotEmpty(t *testing.T) {

@@ -12,7 +12,7 @@ import (
         "strconv"
         "strings"
 
-        "go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/document"
 )
 
 // ─── Group-code pair ──────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ Create a new directory for your plugin (outside the go-cad repo):
 ```
 mkdir my-plugin && cd my-plugin
 go mod init my-plugin
-go get go-cad/pkg/plugin@latest
+go get github.com/tomott12345/go-cad/pkg/plugin@latest
 ```
 
 Create `main.go`:
@@ -29,7 +29,7 @@ Create `main.go`:
 ```go
 package main
 
-import "go-cad/pkg/plugin"
+import "github.com/tomott12345/go-cad/pkg/plugin"
 
 // MyPlugin is a minimal go-cad plugin.
 type MyPlugin struct{ api plugin.HostAPI }

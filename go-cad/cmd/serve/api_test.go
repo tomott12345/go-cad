@@ -10,9 +10,9 @@ import (
         "strconv"
         "testing"
 
-        "go-cad/internal/document"
-        "go-cad/internal/pluginhost"
-        pluginpkg "go-cad/pkg/plugin"
+        "github.com/tomott12345/go-cad/internal/document"
+        "github.com/tomott12345/go-cad/internal/pluginhost"
+        pluginpkg "github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

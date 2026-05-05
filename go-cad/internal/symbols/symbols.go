@@ -6,7 +6,7 @@
 // registered with a Document via document.DefineBlockRaw.
 package symbols
 
-import "go-cad/internal/document"
+import "github.com/tomott12345/go-cad/internal/document"
 
 // Names returns the list of built-in symbol names.
 func Names() []string {

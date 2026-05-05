@@ -4,8 +4,8 @@ import (
         "math"
         "testing"
 
-        "go-cad/internal/constraints"
-        "go-cad/internal/geometry"
+        "github.com/tomott12345/go-cad/internal/constraints"
+        "github.com/tomott12345/go-cad/internal/geometry"
 )
 
 func TestSolveEntities_HorizontalSegment(t *testing.T) {

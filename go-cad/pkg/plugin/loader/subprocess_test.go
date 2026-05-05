@@ -12,7 +12,7 @@ import (
         "sync/atomic"
         "testing"
 
-        "go-cad/pkg/plugin"
+        "github.com/tomott12345/go-cad/pkg/plugin"
 )
 
 // ─── testHostAPI ─────────────────────────────────────────────────────────────

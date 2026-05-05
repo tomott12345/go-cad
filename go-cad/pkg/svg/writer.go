@@ -11,7 +11,7 @@ import (
 	"math"
 	"strings"
 
-	"go-cad/internal/document"
+	"github.com/tomott12345/go-cad/internal/document"
 )
 
 const margin = 10.0 // units around the drawing

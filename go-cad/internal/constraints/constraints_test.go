@@ -4,7 +4,7 @@ import (
         "math"
         "testing"
 
-        "go-cad/internal/geometry"
+        "github.com/tomott12345/go-cad/internal/geometry"
 )
 
 func ptrs(pts ...geometry.Point) []*geometry.Point {

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"go-cad/internal/document"
-	"go-cad/pkg/svg"
+	"github.com/tomott12345/go-cad/internal/document"
+	"github.com/tomott12345/go-cad/pkg/svg"
 )
 
 func TestGenerateEmpty(t *testing.T) {

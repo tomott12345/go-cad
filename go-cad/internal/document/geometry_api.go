@@ -1,7 +1,7 @@
 package document
 
 import (
-	"go-cad/internal/geometry"
+	"github.com/tomott12345/go-cad/internal/geometry"
 )
 
 // EntityBoundingBox returns the axis-aligned bounding box of entity id,
