@@ -58,7 +58,12 @@ export function render() {
     });
   } catch (_) {}
 
-  const entities = JSON.parse(window.cadEntities() || '[]') || [];
+  let entities = [];
+  try {
+    const raw = window.cadEntities ? window.cadEntities() : '[]';
+    const parsed = JSON.parse(raw || '[]');
+    entities = Array.isArray(parsed) ? parsed : [];
+  } catch (_) { entities = []; }
   entities.forEach(e => {
     if (hiddenLayers.has(e.layer)) return;
     drawEntity(e, e.id === state.selectedId);
@@ -594,7 +599,12 @@ function drawPreview() {
 // ── Zoom to fit ────────────────────────────────────────────────────────────────
 export function zoomFit() {
   if (!state.wasmReady || !canvas) return;
-  const es = JSON.parse(window.cadEntities() || '[]') || [];
+  let es = [];
+  try {
+    const raw = window.cadEntities ? window.cadEntities() : '[]';
+    const parsed = JSON.parse(raw || '[]');
+    es = Array.isArray(parsed) ? parsed : [];
+  } catch (_) { es = []; }
   if (!es.length) { state.panX=0; state.panY=0; state.zoom=1; render(); return; }
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
   es.forEach(e => entitySamplePoints(e).forEach(([x,y]) => {
