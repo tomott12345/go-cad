@@ -61,7 +61,7 @@ func main() {
         // Serve static files (web client) at the root — only if the directory exists.
         abs, err := filepath.Abs(*dir)
         if err == nil && dirExists(abs) {
-                mux.Handle("/", http.FileServer(http.Dir(abs)))
+                mux.Handle("/", noCacheStatic(http.FileServer(http.Dir(abs))))
         }
 
         addr := *host + ":" + *port
@@ -74,4 +74,15 @@ func main() {
 func dirExists(path string) bool {
         fi, err := os.Stat(path)
         return err == nil && fi.IsDir()
+}
+
+// noCacheStatic wraps a handler and adds Cache-Control: no-store headers so
+// browsers always fetch the latest JS/WASM files instead of serving stale
+// cached versions after an update.
+func noCacheStatic(h http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                w.Header().Set("Pragma", "no-cache")
+                h.ServeHTTP(w, r)
+        })
 }
