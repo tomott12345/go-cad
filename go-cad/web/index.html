@@ -684,8 +684,8 @@ import { openLayerManager } from './js/dialogs.js';
 setInterval(() => {
   if (!state.wasmReady) return;
   try {
-    const ents   = JSON.parse(window.cadEntities() || '[]');
-    const layers = JSON.parse(window.cadGetLayers() || '[]');
+    const ents   = JSON.parse(window.cadEntities() || '[]') || [];
+    const layers = JSON.parse(window.cadGetLayers() || '[]') || [];
     const entEl  = document.getElementById('ent-count');
     const layEl  = document.getElementById('layer-count');
     const zoomEl = document.getElementById('zoom-display');

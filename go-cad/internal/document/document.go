@@ -700,7 +700,11 @@ func (d *Document) Clear() {
 
 // ToJSON returns all entities as a JSON array string.
 func (d *Document) ToJSON() string {
-        b, _ := json.Marshal(d.entities)
+        entities := d.entities
+        if entities == nil {
+                return "[]"
+        }
+        b, _ := json.Marshal(entities)
         return string(b)
 }
 

@@ -58,7 +58,7 @@ export function render() {
     });
   } catch (_) {}
 
-  const entities = JSON.parse(window.cadEntities() || '[]');
+  const entities = JSON.parse(window.cadEntities() || '[]') || [];
   entities.forEach(e => {
     if (hiddenLayers.has(e.layer)) return;
     drawEntity(e, e.id === state.selectedId);
@@ -594,7 +594,7 @@ function drawPreview() {
 // ── Zoom to fit ────────────────────────────────────────────────────────────────
 export function zoomFit() {
   if (!state.wasmReady || !canvas) return;
-  const es = JSON.parse(window.cadEntities() || '[]');
+  const es = JSON.parse(window.cadEntities() || '[]') || [];
   if (!es.length) { state.panX=0; state.panY=0; state.zoom=1; render(); return; }
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
   es.forEach(e => entitySamplePoints(e).forEach(([x,y]) => {
