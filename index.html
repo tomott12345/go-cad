@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>go-cad</title>
+<style>
+/* ── Reset & tokens ──────────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1e1e1e;--panel-bg:#252526;--panel-border:#3e3e42;
+  --toolbar-bg:#2d2d2d;--accent:#0078d4;--accent-hover:#0060a8;
+  --text:#d4d4d4;--text-dim:#888;--btn-bg:#3a3a3a;--btn-hover:#505050;
+  --input-bg:#1a1a1a;--snap-on:#005f1f;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px/1.4 'Segoe UI',system-ui,sans-serif}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────────── */
+#topbar{display:flex;flex-direction:column;flex-shrink:0;background:var(--toolbar-bg);border-bottom:1px solid var(--panel-border)}
+
+/* ── Main toolbar ─────────────────────────────────────────────────────────────── */
+#main-toolbar{display:flex;align-items:center;gap:3px;padding:4px 8px;flex-wrap:wrap;min-height:36px}
+#main-toolbar button{padding:3px 9px;border:1px solid #555;border-radius:4px;background:var(--btn-bg);color:var(--text);cursor:pointer;font-size:11px;white-space:nowrap;transition:background .12s}
+#main-toolbar button:hover{background:var(--btn-hover)}
+#main-toolbar button.active{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+#main-toolbar button.snap-on{background:var(--snap-on);border-color:#007a28;color:#6effa0}
+#main-toolbar .sep{width:1px;height:22px;background:#555;margin:0 3px;flex-shrink:0}
+#main-toolbar select,#layer-sel,#export-fmt{background:var(--btn-bg);border:1px solid #555;border-radius:4px;color:var(--text);font-size:11px;padding:2px 5px;cursor:pointer}
+#color-inp{width:32px;height:24px;border:1px solid #555;border-radius:4px;padding:1px;cursor:pointer;background:transparent}
+
+/* ── Snap toolbar row ─────────────────────────────────────────────────────────── */
+#snap-toolbar-row{display:flex;align-items:center;gap:4px;padding:3px 8px;background:#282828;border-bottom:1px solid var(--panel-border);flex-wrap:wrap;flex-shrink:0}
+#snap-toolbar-row label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-right:2px}
+.snap-bar-btn{padding:2px 7px;border:1px solid #444;border-radius:3px;background:var(--input-bg);color:var(--text-dim);cursor:pointer;font-size:10px;position:relative;transition:background .12s,color .12s,border-color .12s}
+.snap-bar-btn::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--snap-color,#888);margin-right:3px;vertical-align:middle}
+.snap-bar-btn.snap-bar-on{background:#003a1a;border-color:var(--snap-color,#888);color:#a8ffb0}
+.snap-bar-btn:hover{background:var(--btn-hover);color:var(--text)}
+#btn-snap{padding:2px 9px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text-dim);cursor:pointer;font-size:11px;font-weight:600}
+#btn-snap.snap-on{background:var(--snap-on);border-color:#007a28;color:#6effa0}
+#snap-divider{width:1px;height:18px;background:#555;margin:0 2px}
+
+/* ── Coordinate input bar ─────────────────────────────────────────────────────── */
+#coord-bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:#242424;border-bottom:1px solid var(--panel-border);flex-shrink:0;font-size:11px}
+#coord-bar label{color:var(--text-dim);white-space:nowrap}
+#coord-input{flex:0 0 220px;background:var(--input-bg);border:1px solid #555;border-radius:3px;color:var(--text);font-size:11px;padding:2px 6px;outline:none}
+#coord-input:focus{border-color:var(--accent)}
+#coord-readout{color:#556;font-size:10px;min-width:180px}
+#coord-bar .coord-hint{color:#444;font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Workspace (three-column) ─────────────────────────────────────────────────── */
+#workspace{display:flex;flex-direction:row;flex:1;overflow:hidden;min-height:0}
+
+/* ── Left panel ───────────────────────────────────────────────────────────────── */
+#left-panel{width:200px;min-width:100px;max-width:400px;background:var(--panel-bg);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+
+/* ── Vertical splitters ───────────────────────────────────────────────────────── */
+.vsplitter{width:4px;background:var(--panel-border);cursor:col-resize;flex-shrink:0;transition:background .15s}
+.vsplitter:hover{background:var(--accent)}
+
+/* ── Center column ────────────────────────────────────────────────────────────── */
+#center-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#viewport{flex:1;position:relative;overflow:hidden;min-height:0}
+#canvas{display:block;cursor:crosshair;position:absolute;inset:0}
+
+/* ── Horizontal splitter ──────────────────────────────────────────────────────── */
+.hsplitter{height:4px;background:var(--panel-border);cursor:row-resize;flex-shrink:0;transition:background .15s}
+.hsplitter:hover{background:var(--accent)}
+
+/* ── Bottom panel (History + command) ────────────────────────────────────────── */
+#bottom-panel{height:160px;min-height:40px;background:var(--panel-bg);display:flex;flex-direction:column;flex-shrink:0}
+#history-list{flex:1;overflow-y:auto;font-size:11px;font-family:monospace;padding:2px 6px}
+.hist-entry{display:flex;align-items:baseline;gap:6px;padding:1px 0;cursor:pointer;border-radius:2px}
+.hist-entry:hover{background:#2a2a2a}
+.hist-time{color:#555;flex-shrink:0;font-size:10px}
+.hist-cmd{color:#a8d8a8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-result{color:#777;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+
+/* ── Right panel ──────────────────────────────────────────────────────────────── */
+#right-panel{width:240px;min-width:140px;max-width:440px;background:var(--panel-bg);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+
+/* ── Panel sections ───────────────────────────────────────────────────────────── */
+.panel-section{border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;background:#2a2a2a;font-size:11px;font-weight:600;color:#bbb;text-transform:uppercase;letter-spacing:.4px;user-select:none}
+.panel-header .header-actions{display:flex;gap:4px}
+.collapse-btn{background:none;border:none;color:#888;cursor:pointer;font-size:10px;padding:0;line-height:1}
+.collapse-btn:hover{color:#ccc}
+.panel-content{padding:6px}
+
+/* ── Properties Inspector ─────────────────────────────────────────────────────── */
+.insp-empty{color:var(--text-dim);font-size:11px;padding:10px 6px;text-align:center;line-height:1.6}
+.insp-type-row{display:flex;align-items:baseline;gap:6px;padding:4px 6px;border-bottom:1px solid var(--panel-border);margin-bottom:4px}
+.insp-type{font-weight:700;font-size:12px;color:#7ec8e3}
+.insp-id{font-size:10px;color:#555}
+.insp-table{display:flex;flex-direction:column;gap:2px;padding:0 2px}
+.insp-row{display:flex;align-items:center;gap:4px;min-height:22px}
+.insp-label{font-size:10px;color:var(--text-dim);min-width:72px;flex-shrink:0;text-align:right;padding-right:4px}
+.insp-value{font-size:11px;color:#c8c8c8;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.insp-field{flex:1;background:var(--input-bg);border:1px solid #444;border-radius:2px;color:var(--text);font-size:11px;padding:1px 4px;min-width:0;outline:none}
+.insp-field:focus{border-color:var(--accent)}
+.insp-field[type=color]{width:36px;height:20px;padding:1px;cursor:pointer;flex:none}
+.insp-field[type=number]{font-family:monospace}
+
+/* ── Command bar ──────────────────────────────────────────────────────────────── */
+#cmdbar{display:flex;align-items:center;gap:8px;padding:3px 8px;background:#202020;border-top:1px solid var(--panel-border);flex-shrink:0;min-height:28px}
+#status{flex:1;color:var(--text-dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cmd-input{flex:0 0 300px;background:var(--input-bg);border:1px solid #555;border-radius:4px;color:var(--text);font-size:11px;padding:3px 8px;outline:none}
+#cmd-input:focus{border-color:var(--accent)}
+#coords-display{color:#556;font-size:10px;min-width:140px;text-align:right;font-family:monospace}
+#cmdbar select{background:var(--btn-bg);border:1px solid #555;border-radius:4px;color:var(--text);font-size:11px;padding:1px 5px}
+
+/* ── Welcome overlay ─────────────────────────────────────────────────────────── */
+#welcome-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center}
+#welcome-box{background:#252526;border:1px solid #555;border-radius:10px;padding:32px 40px;max-width:480px;width:90%;text-align:center;box-shadow:0 12px 48px rgba(0,0,0,.8)}
+#welcome-box h1{font-size:28px;font-weight:700;color:#7ec8e3;margin-bottom:6px;letter-spacing:-0.5px}
+#welcome-box .subtitle{color:#888;font-size:13px;margin-bottom:28px}
+#welcome-box .btn-group{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#welcome-box button{padding:9px 22px;border:1px solid #555;border-radius:6px;font-size:13px;cursor:pointer;transition:background .15s}
+#btn-welcome-new{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+#btn-welcome-new:hover{background:var(--accent-hover)}
+#btn-welcome-open{background:var(--btn-bg);color:var(--text)}
+#btn-welcome-open:hover{background:var(--btn-hover)}
+#btn-welcome-close{background:transparent;color:#666;border-color:#444}
+#btn-welcome-close:hover{color:#aaa}
+#welcome-box .shortcuts{margin-top:22px;text-align:left;border-top:1px solid #333;padding-top:16px}
+#welcome-box .shortcuts h3{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+#welcome-box .shortcuts dl{display:grid;grid-template-columns:1fr 2fr;gap:4px 10px;font-size:11px}
+#welcome-box .shortcuts dt{color:#888;text-align:right}
+#welcome-box .shortcuts dd{color:#bbb}
+
+/* ── Modals (layers, blocks, symbols, drafting, print) ───────────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#252525;border:1px solid #555;border-radius:6px;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.modal-box h3{padding:10px 14px;margin:0;font-size:13px;border-bottom:1px solid #444;color:#ddd;display:flex;justify-content:space-between;align-items:center}
+.modal-box h3 button{padding:2px 8px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.modal-box h3 button:hover{background:var(--btn-hover)}
+.modal-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #444;justify-content:flex-end}
+.modal-footer button{padding:4px 14px;border:1px solid #555;border-radius:4px;background:var(--btn-bg);color:var(--text);cursor:pointer;font-size:12px}
+.modal-footer button:hover{background:var(--btn-hover)}
+.modal-footer button.primary{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+.modal-footer button.primary:hover{background:var(--accent-hover)}
+
+/* Layer modal */
+#layer-modal .modal-box{width:640px;max-height:80vh}
+#layer-table-wrap{overflow-y:auto;flex:1}
+#layer-table{width:100%;border-collapse:collapse;font-size:11px}
+#layer-table th{padding:4px 7px;background:#2d2d2d;border-bottom:1px solid #444;text-align:left;color:#aaa;font-weight:600;position:sticky;top:0}
+#layer-table td{padding:3px 7px;border-bottom:1px solid #333;vertical-align:middle}
+#layer-table tr:hover td{background:#2a2a2a}
+#layer-table input[type=text]{background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:11px;padding:2px 5px;width:100%}
+#layer-table input[type=color]{width:26px;height:20px;border:1px solid #444;border-radius:3px;padding:1px;cursor:pointer;background:transparent}
+#layer-table select{background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:11px;padding:1px 4px}
+.layer-check{cursor:pointer;accent-color:var(--accent)}
+.layer-btn{padding:1px 7px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.layer-btn:hover{background:var(--btn-hover)}
+.layer-del{color:#c0392b;border-color:#7b241c}
+.layer-del:hover{background:#7b241c}
+
+/* Block modal */
+#block-modal .modal-box{width:520px;max-height:75vh}
+#block-list{overflow-y:auto;flex:1;padding:8px}
+.block-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid #333;font-size:12px;color:var(--text)}
+.block-item:hover{background:#2a2a2a}
+.block-thumb{width:72px;height:54px;flex:0 0 72px;background:#111;border:1px solid #444;border-radius:3px}
+.block-info{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.block-name{font-weight:600;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.block-meta{color:#888;font-size:10px}
+.block-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.block-insert-btn:hover{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+
+/* Sym modal */
+#sym-modal .modal-box{width:380px;max-height:60vh}
+#sym-list{overflow-y:auto;flex:1;padding:6px}
+.sym-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid #333;font-size:12px;color:var(--text)}
+.sym-item:hover{background:#2a2a2a}
+.sym-item span{flex:1}
+.sym-insert-btn{padding:2px 10px;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+.sym-insert-btn:hover{background:var(--accent);border-color:var(--accent-hover);color:#fff}
+
+/* Hatch bar */
+#hatch-bar{display:none;align-items:center;gap:5px;padding:3px 8px;background:#282828;border-top:1px solid #333;font-size:11px;color:#aaa;flex-shrink:0}
+#hatch-bar.open{display:flex}
+#hatch-bar select,#hatch-bar input[type=number]{background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:11px;padding:1px 5px}
+#hatch-bar input[type=number]{width:52px}
+
+/* Snap Settings Popover */
+#snap-settings{display:none;position:absolute;top:36px;left:0;background:#252525;border:1px solid #555;border-radius:5px;padding:10px 12px;z-index:300;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.7)}
+#snap-settings.open{display:block}
+#snap-settings h4{font-size:10px;color:#888;margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px}
+.snap-row{display:flex;align-items:center;gap:7px;padding:2px 0;cursor:pointer;font-size:11px;color:var(--text)}
+.snap-row input{accent-color:var(--accent);cursor:pointer}
+.snap-swatch{width:9px;height:9px;border-radius:1px;flex-shrink:0}
+#snap-settings-footer{display:flex;gap:6px;margin-top:8px;padding-top:7px;border-top:1px solid #333}
+#snap-settings-footer button{flex:1;padding:3px 0;font-size:11px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text);cursor:pointer}
+#snap-settings-footer button:hover{background:var(--btn-hover)}
+
+/* Snap marker overlay */
+#snap-marker{position:absolute;pointer-events:none;display:none;top:0;left:0}
+#snap-marker svg{overflow:visible}
+
+/* Drafting Settings */
+#drafting-modal .modal-box{width:440px}
+.ds-form{padding:14px;display:flex;flex-direction:column;gap:10px}
+.ds-section{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;border-bottom:1px solid #333;padding-bottom:3px}
+.ds-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.ds-row label{min-width:100px;color:#bbb;text-align:right}
+.ds-row input,.ds-row select{flex:1;background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:12px;padding:3px 6px;outline:none}
+.ds-row input:focus,.ds-row select:focus{border-color:var(--accent)}
+.ds-row input[type=checkbox]{flex:none;accent-color:var(--accent)}
+.ds-row input[type=color]{width:40px;height:24px;padding:1px;cursor:pointer}
+
+/* Print/Plot */
+#print-modal .modal-box{width:400px}
+.print-form{padding:14px;display:flex;flex-direction:column;gap:10px}
+.print-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.print-row label{min-width:100px;color:#bbb;text-align:right}
+.print-row select{flex:1;background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:12px;padding:3px 6px}
+
+/* Block library (right panel) */
+.block-lib-item{display:flex;align-items:center;gap:6px;padding:3px 4px;border-bottom:1px solid #2a2a2a;cursor:pointer;font-size:11px;color:#bbb;border-radius:3px}
+.block-lib-item:hover{background:#2d2d2d}
+.block-lib-icon{width:28px;height:22px;background:#111;border:1px solid #333;border-radius:2px;flex-shrink:0}
+
+/* Layer quick sidebar */
+.layer-quick-row{display:flex;align-items:center;gap:4px;padding:2px 4px;font-size:11px;cursor:pointer;border-radius:2px}
+.layer-quick-row:hover{background:#2d2d2d}
+.layer-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- ── Welcome Overlay ───────────────────────────────────────────────────────── -->
+<div id="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+  <div id="welcome-box">
+    <h1 id="welcome-title">go-cad</h1>
+    <p class="subtitle">Open-source browser CAD — zero dependencies, WASM-powered</p>
+    <div class="btn-group">
+      <button id="btn-welcome-new" aria-label="Start a new empty drawing">New Drawing</button>
+      <button id="btn-welcome-open" aria-label="Open a DXF file from disk">Open DXF…</button>
+      <button id="btn-welcome-close" aria-label="Skip and go to canvas">Skip</button>
+    </div>
+    <div class="shortcuts">
+      <h3>Quick Start</h3>
+      <dl>
+        <dt>L, C, A, R, P</dt><dd>Line, Circle, Arc, Rect, Polyline</dd>
+        <dt>T, S, N, E</dt><dd>Text, Spline, NURBS, Ellipse</dd>
+        <dt>Ctrl+Z / Y</dt><dd>Undo / Redo</dd>
+        <dt>F3</dt><dd>Toggle Object Snap</dd>
+        <dt>ZF or Fit button</dt><dd>Zoom to fit all entities</dd>
+        <dt>Middle drag / Ctrl+drag</dt><dd>Pan canvas</dd>
+        <dt>Scroll wheel</dt><dd>Zoom in / out</dd>
+      </dl>
+    </div>
+    <div style="margin-top:16px;border-top:1px solid #333;padding-top:12px;text-align:left">
+      <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Recent Files</div>
+      <div id="welcome-recent-list"></div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <a href="https://github.com/your-org/go-cad" target="_blank" rel="noopener"
+         style="font-size:11px;color:#4488ff;text-decoration:none" aria-label="go-cad documentation and source code on GitHub">
+        Documentation &amp; Source ↗
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Top Bar ───────────────────────────────────────────────────────────────── -->
+<div id="topbar">
+
+  <!-- Main toolbar -->
+  <div id="main-toolbar" role="toolbar" aria-label="Drawing tools">
+    <!-- Selection -->
+    <button id="tool-select" class="active" title="Select (Esc)" aria-label="Select tool — click entity to inspect">Select</button>
+    <div class="sep" role="separator"></div>
+    <!-- Draw primitives -->
+    <button id="tool-line"    title="Line (L)"                  aria-label="Draw line">Line</button>
+    <button id="tool-circle"  title="Circle (C)"                aria-label="Draw circle">Circle</button>
+    <button id="tool-arc"     title="Arc (A)"                   aria-label="Draw arc">Arc</button>
+    <button id="tool-rect"    title="Rectangle (R)"             aria-label="Draw rectangle">Rect</button>
+    <button id="tool-poly"    title="Polyline (P)"              aria-label="Draw polyline">Poly</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-spline"  title="Cubic Bezier Spline (S)"   aria-label="Draw spline">Spline</button>
+    <button id="tool-nurbs"   title="NURBS B-Spline (N)"        aria-label="Draw NURBS">NURBS</button>
+    <button id="tool-ellipse" title="Ellipse (E)"               aria-label="Draw ellipse">Ellipse</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-text"   title="Single-line Text (T)"       aria-label="Place single-line text">Text</button>
+    <button id="tool-mtext"  title="Multi-line Text (MT)"       aria-label="Place multi-line text">MText</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-dimlin"  title="Linear Dimension"          aria-label="Linear dimension">DimLin</button>
+    <button id="tool-dimali"  title="Aligned Dimension"         aria-label="Aligned dimension">DimAli</button>
+    <button id="tool-dimang"  title="Angular Dimension"         aria-label="Angular dimension">DimAng</button>
+    <button id="tool-dimrad"  title="Radial Dimension"          aria-label="Radial dimension">DimRad</button>
+    <button id="tool-dimdia"  title="Diameter Dimension"        aria-label="Diameter dimension">DimDia</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-move"       title="Move (M)"               aria-label="Move entity">Move</button>
+    <button id="tool-copy"       title="Copy (CP)"              aria-label="Copy entity">Copy</button>
+    <button id="tool-rotate"     title="Rotate (RO)"            aria-label="Rotate entity">Rotate</button>
+    <button id="tool-scale"      title="Scale (SC)"             aria-label="Scale entity">Scale</button>
+    <button id="tool-mirror"     title="Mirror (MI)"            aria-label="Mirror entity">Mirror</button>
+    <button id="tool-trim"       title="Trim (TR)"              aria-label="Trim entity">Trim</button>
+    <button id="tool-extend"     title="Extend (EX)"            aria-label="Extend entity">Extend</button>
+    <button id="tool-fillet"     title="Fillet (F)"             aria-label="Fillet two lines">Fillet</button>
+    <button id="tool-chamfer"    title="Chamfer (CHA)"          aria-label="Chamfer two lines">Chamfer</button>
+    <button id="tool-arrayrect"  title="Rectangular Array (AR)" aria-label="Rectangular array">ArrRect</button>
+    <button id="tool-arraypolar" title="Polar Array (AP)"       aria-label="Polar array">ArrPolar</button>
+    <button id="tool-offset"     title="Offset (O)"             aria-label="Offset entity">Offset</button>
+    <div class="sep" role="separator"></div>
+    <button id="tool-hatch"    title="Hatch fill (H)"           aria-label="Draw hatch fill">Hatch</button>
+    <button id="tool-leader"   title="Leader annotation (LD)"   aria-label="Draw leader annotation">Leader</button>
+    <button id="tool-revcloud" title="Revision Cloud (RC)"      aria-label="Draw revision cloud">RevCloud</button>
+    <button id="tool-wipeout"  title="Wipeout mask (WP)"        aria-label="Draw wipeout mask">Wipeout</button>
+    <div class="sep" role="separator"></div>
+    <button id="btn-blocks"  title="Block Manager…"             aria-label="Open block manager">Blocks…</button>
+    <button id="btn-symbols" title="Insert Symbol…"             aria-label="Insert symbol">Symbols…</button>
+    <div class="sep" role="separator"></div>
+    <button id="btn-open"    title="Open DXF (Ctrl+O)"          aria-label="Open DXF file">Open…</button>
+    <input id="file-input" type="file" accept=".dxf" style="display:none" aria-label="Choose DXF file">
+    <button id="btn-undo"    title="Undo (Ctrl+Z)"              aria-label="Undo last action">Undo</button>
+    <button id="btn-redo"    title="Redo (Ctrl+Y)"              aria-label="Redo last undone action">Redo</button>
+    <button id="btn-del"     title="Delete selected (Del)"      aria-label="Delete selected entity">Delete</button>
+    <button id="btn-clear"   title="Clear all"                  aria-label="Clear all entities">Clear</button>
+    <button id="btn-zoomfit" title="Zoom to fit (ZF)"           aria-label="Zoom to fit all entities">Fit</button>
+    <div class="sep" role="separator"></div>
+    <button id="btn-export"   title="Export"                    aria-label="Export drawing">Export</button>
+    <select id="export-fmt" title="Export format"               aria-label="Export format">
+      <option value="r2000">DXF R2000</option>
+      <option value="r12">DXF R12</option>
+      <option value="svg">SVG</option>
+    </select>
+    <div class="sep" role="separator"></div>
+    <button id="btn-print"    title="Print / Plot…"             aria-label="Open print and plot dialog">Print…</button>
+    <button id="btn-drafting" title="Drafting Settings…"        aria-label="Open drafting settings">Settings…</button>
+    <div class="sep" role="separator"></div>
+    <label style="color:var(--text-dim);font-size:10px" for="layer-sel">Layer</label>
+    <select id="layer-sel" title="Current drawing layer"        aria-label="Current drawing layer"></select>
+    <button id="btn-layers" title="Layer Manager…"              aria-label="Open layer manager">Layers…</button>
+    <input type="color" id="color-inp" value="#00ff00" title="Entity colour" aria-label="Entity colour">
+  </div>
+
+  <!-- Snap toolbar row -->
+  <div id="snap-toolbar-row">
+    <label>Snap</label>
+    <div style="position:relative">
+      <button id="btn-snap" class="snap-on" title="Toggle Object Snap (F3)">Snap ✓</button>
+      <div id="snap-settings">
+        <h4>Object Snap Modes</h4>
+        <label class="snap-row"><input type="checkbox" id="snp-endpoint"      checked><span class="snap-swatch" style="background:#ff4444"></span>Endpoint</label>
+        <label class="snap-row"><input type="checkbox" id="snp-midpoint"      checked><span class="snap-swatch" style="background:#44ff44"></span>Midpoint</label>
+        <label class="snap-row"><input type="checkbox" id="snp-center"        checked><span class="snap-swatch" style="background:#4488ff"></span>Center</label>
+        <label class="snap-row"><input type="checkbox" id="snp-quadrant"      checked><span class="snap-swatch" style="background:#ffaa00"></span>Quadrant</label>
+        <label class="snap-row"><input type="checkbox" id="snp-intersection"  checked><span class="snap-swatch" style="background:#ff44ff"></span>Intersection</label>
+        <label class="snap-row"><input type="checkbox" id="snp-perpendicular" checked><span class="snap-swatch" style="background:#00ffff"></span>Perpendicular</label>
+        <label class="snap-row"><input type="checkbox" id="snp-tangent"       checked><span class="snap-swatch" style="background:#ffff44"></span>Tangent</label>
+        <label class="snap-row"><input type="checkbox" id="snp-nearest"       checked><span class="snap-swatch" style="background:#aaaaaa"></span>Nearest</label>
+        <div id="snap-settings-footer">
+          <button id="btn-snap-all">All</button>
+          <button id="btn-snap-none">None</button>
+          <button id="btn-snap-close">Close</button>
+        </div>
+      </div>
+    </div>
+    <button id="btn-snap-settings" title="Snap settings" style="padding:2px 6px;border:1px solid #555;border-radius:3px;background:var(--btn-bg);color:var(--text-dim);cursor:pointer;font-size:11px">⚙</button>
+    <div id="snap-divider"></div>
+    <span id="snap-btn-bar"></span><!-- populated by snap.js -->
+  </div>
+
+  <!-- Coordinate input bar -->
+  <div id="coord-bar">
+    <label>Coord:</label>
+    <input id="coord-input" placeholder="x,y  or  @dx,dy  or  @dist&lt;angle" autocomplete="off" spellcheck="false">
+    <span id="coord-readout">X: 0.000   Y: 0.000</span>
+    <span class="coord-hint">Absolute, relative (@), or polar (@dist&lt;ang)</span>
+  </div>
+</div>
+
+<!-- ── Hatch options (shown when hatch tool active) ──────────────────────────── -->
+<div id="hatch-bar">
+  <label>Pattern:</label>
+  <select id="hatch-pattern">
+    <option value="SOLID">SOLID</option>
+    <option value="ANSI31" selected>ANSI31 (45°)</option>
+    <option value="ANSI32">ANSI32 (cross)</option>
+    <option value="DOTS">DOTS</option>
+  </select>
+  <label>Angle:</label>
+  <input type="number" id="hatch-angle" value="0" min="-360" max="360" step="5">°
+  <label>Scale:</label>
+  <input type="number" id="hatch-scale" value="5" min="0.1" max="200" step="0.5">
+</div>
+
+<!-- ── Workspace ─────────────────────────────────────────────────────────────── -->
+<div id="workspace">
+
+  <!-- Left sidebar: Tools + Layers quick view -->
+  <aside id="left-panel">
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Drawing Info</span>
+        <button class="collapse-btn">▾</button>
+      </div>
+      <div class="panel-content" id="drawing-info">
+        <div style="color:var(--text-dim);font-size:11px;line-height:1.8">
+          <div>Entities: <span id="ent-count">0</span></div>
+          <div>Layers: <span id="layer-count">1</span></div>
+          <div>Zoom: <span id="zoom-display">100%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Layers</span>
+        <div class="header-actions">
+          <button style="background:none;border:none;color:#888;cursor:pointer;font-size:11px" id="btn-layers-sidebar" title="Layer Manager">⚙</button>
+          <button class="collapse-btn">▾</button>
+        </div>
+      </div>
+      <div class="panel-content" id="layers-sidebar">
+        <!-- populated dynamically -->
+        <div style="color:var(--text-dim);font-size:11px">(loading…)</div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Tool Options</span>
+        <button class="collapse-btn">▾</button>
+      </div>
+      <div class="panel-content" id="tool-options-content">
+        <div style="color:var(--text-dim);font-size:11px">Select a tool to see options.</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="vsplitter" id="vsplitter-left"></div>
+
+  <!-- Center: canvas + bottom history panel -->
+  <div id="center-col">
+    <div id="viewport">
+      <canvas id="canvas"></canvas>
+      <div id="snap-marker">
+        <svg width="20" height="20" viewBox="-10 -10 20 20" id="snap-svg"></svg>
+      </div>
+    </div>
+
+    <div class="hsplitter" id="hsplitter-bottom"></div>
+
+    <!-- Bottom panel: Command history -->
+    <div id="bottom-panel">
+      <div class="panel-header" style="cursor:default">
+        <span>Command History</span>
+        <button id="btn-toggle-bottom" class="collapse-btn" title="Toggle history panel">▾</button>
+      </div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <div class="vsplitter" id="vsplitter-right"></div>
+
+  <!-- Right sidebar: Properties + Block Library -->
+  <aside id="right-panel">
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Properties</span>
+        <button class="collapse-btn">▾</button>
+      </div>
+      <div class="panel-content" id="inspector-content" style="padding:4px 2px">
+        <div class="insp-empty">No entity selected.<br><small>Click an entity to inspect it.</small></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-header">
+        <span>Block Library</span>
+        <div class="header-actions">
+          <button style="background:none;border:none;color:#888;cursor:pointer;font-size:11px" id="btn-refresh-blocks" title="Refresh">↻</button>
+          <button class="collapse-btn">▾</button>
+        </div>
+      </div>
+      <div class="panel-content" id="block-library-content">
+        <div style="color:var(--text-dim);font-size:11px">(no blocks)</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ── Command / Status bar ───────────────────────────────────────────────────── -->
+<div id="cmdbar">
+  <div id="status">Initialising…</div>
+  <input id="cmd-input" placeholder="Command  (LINE, CIRCLE, ARC, HATCH, UNDO, ZF, …)" autocomplete="off" spellcheck="false">
+  <div id="coords-display">0.000, 0.000</div>
+</div>
+
+<!-- ── Layer Manager Modal ─────────────────────────────────────────────────────── -->
+<div id="layer-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Layer Manager">
+  <div class="modal-box">
+    <h3>Layer Manager
+      <button id="btn-add-layer">+ New Layer</button>
+    </h3>
+    <div id="layer-table-wrap">
+      <table id="layer-table">
+        <thead>
+          <tr>
+            <th>Cur</th><th>Name</th><th>Color</th><th>Line Type</th>
+            <th title="Line weight">LW</th>
+            <th title="Visible">Vis</th><th title="Locked">Lck</th>
+            <th title="Frozen">Frz</th><th title="Print">Prt</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="layer-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-close-layers">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Block Manager Modal ─────────────────────────────────────────────────────── -->
+<div id="block-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Block Manager">
+  <div class="modal-box">
+    <h3>Block Manager
+      <button id="btn-close-blocks">✕</button>
+    </h3>
+    <div id="block-list"></div>
+    <div class="modal-footer">
+      <button id="btn-close-blocks2">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Symbols Modal ──────────────────────────────────────────────────────────── -->
+<div id="sym-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Insert Symbol">
+  <div class="modal-box">
+    <h3>Insert Symbol</h3>
+    <div id="sym-list"></div>
+    <div class="modal-footer">
+      <button id="btn-close-sym">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Drafting Settings Dialog ───────────────────────────────────────────────── -->
+<div id="drafting-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="drafting-title">
+  <div class="modal-box">
+    <h3 id="drafting-title">Drafting Settings
+      <button id="btn-close-drafting-x" aria-label="Close drafting settings">✕</button>
+    </h3>
+    <div class="ds-form">
+      <div class="ds-section">Grid</div>
+      <div class="ds-row">
+        <label for="ds-grid-x">Grid X spacing</label>
+        <input type="number" id="ds-grid-x" value="10" min="0.1" step="0.1">
+      </div>
+      <div class="ds-row">
+        <label for="ds-grid-y">Grid Y spacing</label>
+        <input type="number" id="ds-grid-y" value="10" min="0.1" step="0.1">
+      </div>
+      <div class="ds-row">
+        <label for="ds-grid-on">Show Grid</label>
+        <input type="checkbox" id="ds-grid-on" checked>
+      </div>
+      <div class="ds-section">Units &amp; Precision</div>
+      <div class="ds-row">
+        <label for="ds-unit-sel">Units</label>
+        <select id="ds-unit-sel">
+          <option value="mm">Millimetres (mm)</option>
+          <option value="cm">Centimetres (cm)</option>
+          <option value="m">Metres (m)</option>
+          <option value="in">Inches (in)</option>
+          <option value="ft">Feet (ft)</option>
+        </select>
+      </div>
+      <div class="ds-row">
+        <label for="ds-precision">Precision (decimal places)</label>
+        <input type="number" id="ds-precision" value="4" min="0" max="8" step="1">
+      </div>
+      <div class="ds-section">Entity Defaults</div>
+      <div class="ds-row">
+        <label for="ds-def-color">Default Color</label>
+        <input type="color" id="ds-def-color" value="#00ff00">
+      </div>
+      <div class="ds-row">
+        <label for="ds-def-linetype">Default Linetype</label>
+        <select id="ds-def-linetype">
+          <option value="Solid">Solid</option>
+          <option value="Dashed">Dashed</option>
+          <option value="Dotted">Dotted</option>
+          <option value="DashDot">DashDot</option>
+          <option value="Center">Center</option>
+          <option value="Hidden">Hidden</option>
+        </select>
+      </div>
+      <div class="ds-row">
+        <label for="ds-def-lw">Default Lineweight (mm)</label>
+        <input type="number" id="ds-def-lw" value="0.25" min="0.05" max="2" step="0.05">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-close-drafting">Cancel</button>
+      <button id="btn-apply-drafting" class="primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Print / Plot Dialog ────────────────────────────────────────────────────── -->
+<div id="print-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="print-title">
+  <div class="modal-box">
+    <h3 id="print-title">Print / Plot
+      <button id="btn-close-print-x" aria-label="Close print dialog">✕</button>
+    </h3>
+    <div class="print-form">
+      <div class="print-row">
+        <label for="print-fmt">Output format</label>
+        <select id="print-fmt">
+          <option value="pdf">PDF (browser print)</option>
+          <option value="png">PNG (canvas snapshot)</option>
+          <option value="svg">SVG (vector export)</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-area">Plot area</label>
+        <select id="print-area">
+          <option value="all">All entities (extents)</option>
+          <option value="view">Current view</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-paper">Paper size</label>
+        <select id="print-paper">
+          <option value="a4">A4 (210×297mm)</option>
+          <option value="a3">A3 (297×420mm)</option>
+          <option value="letter">Letter (8.5×11in)</option>
+          <option value="tabloid">Tabloid (11×17in)</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-orient">Orientation</label>
+        <select id="print-orient">
+          <option value="landscape">Landscape</option>
+          <option value="portrait">Portrait</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-scale">Scale</label>
+        <select id="print-scale">
+          <option value="fit">Fit to page</option>
+          <option value="1:1">1:1</option>
+          <option value="1:2">1:2</option>
+          <option value="1:5">1:5</option>
+          <option value="1:10">1:10</option>
+          <option value="1:50">1:50</option>
+          <option value="1:100">1:100</option>
+        </select>
+      </div>
+      <div class="print-row">
+        <label for="print-margins">Margins (mm)</label>
+        <input type="number" id="print-margins" value="10" min="0" max="50" step="1" style="flex:1;background:var(--input-bg);border:1px solid #444;border-radius:3px;color:var(--text);font-size:12px;padding:3px 6px" title="Uniform margin on all sides">
+      </div>
+      <div class="print-row" id="print-dpi-row">
+        <label for="print-dpi">DPI (PNG only)</label>
+        <select id="print-dpi">
+          <option value="96">96 dpi (screen)</option>
+          <option value="150">150 dpi</option>
+          <option value="300" selected>300 dpi (print)</option>
+          <option value="600">600 dpi (high)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-close-print">Cancel</button>
+      <button id="btn-execute-print" class="primary">Print / Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── App entry point ────────────────────────────────────────────────────────── -->
+<script type="module" src="js/app.js"></script>
+
+<!-- ── Live status updates for the drawing info sidebar ──────────────────────── -->
+<script type="module">
+import { state } from './js/state.js';
+import { render } from './js/canvas.js';
+import { openLayerManager } from './js/dialogs.js';
+
+// Update sidebar drawing info every 2 seconds
+setInterval(() => {
+  if (!state.wasmReady) return;
+  try {
+    const ents   = JSON.parse(window.cadEntities() || '[]') || [];
+    const layers = JSON.parse(window.cadGetLayers() || '[]') || [];
+    const entEl  = document.getElementById('ent-count');
+    const layEl  = document.getElementById('layer-count');
+    const zoomEl = document.getElementById('zoom-display');
+    if (entEl)  entEl.textContent  = ents.length;
+    if (layEl)  layEl.textContent  = layers.length;
+    if (zoomEl) zoomEl.textContent = (state.zoom * 100).toFixed(0) + '%';
+
+    // Refresh layers sidebar
+    const sidebar = document.getElementById('layers-sidebar');
+    if (sidebar) {
+      sidebar.innerHTML = layers.map(l => `
+        <div class="layer-quick-row" title="${l.name}">
+          <span class="layer-swatch" style="background:${l.color||'#fff'}"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${l.name}</span>
+          <span style="font-size:10px;color:#555">${l.visible?'':'👁'}</span>
+        </div>`).join('');
+    }
+
+    // Refresh block library sidebar
+    const blockLib = document.getElementById('block-library-content');
+    if (blockLib && window.cadGetBlocks) {
+      const blocks = JSON.parse(window.cadGetBlocks() || '[]');
+      if (blocks.length === 0) {
+        blockLib.innerHTML = '<div style="color:var(--text-dim);font-size:11px">(no blocks defined)</div>';
+      } else {
+        blockLib.innerHTML = blocks.slice(0, 20).map(b => `
+          <div class="block-lib-item" data-block="${b.name}" title="Click to insert ${b.name}">
+            <canvas class="block-lib-icon" data-block="${b.name}" width="28" height="22"></canvas>
+            <span>${b.name}</span>
+          </div>`).join('');
+      }
+    }
+  } catch (_) {}
+}, 2000);
+
+// Layer sidebar manager button
+document.getElementById('btn-layers-sidebar')?.addEventListener('click', openLayerManager);
+
+// Refresh blocks button
+document.getElementById('btn-refresh-blocks')?.addEventListener('click', () => {
+  if (!state.wasmReady) return;
+  const blocks   = JSON.parse(window.cadGetBlocks() || '[]');
+  const blockLib = document.getElementById('block-library-content');
+  if (!blockLib) return;
+  blockLib.innerHTML = blocks.length
+    ? blocks.map(b => `<div class="block-lib-item"><span style="font-size:11px">${b.name}</span></div>`).join('')
+    : '<div style="color:var(--text-dim);font-size:11px">(no blocks)</div>';
+});
+</script>
+
+</body>
+</html>
