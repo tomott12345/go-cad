@@ -43,6 +43,13 @@ jobs:
           cache: true
       - name: Run tests with coverage
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Compute total coverage
+        run: |
+          go tool cover -func=coverage.out \
+            | grep '^total:' | awk '{print $3}' \
+            > "$RUNNER_TEMP/coverage-total.txt"
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
@@ -51,14 +58,53 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      # ── Base-branch cache: save on push to main ──────────────────────────
+      - name: Save base coverage to cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/coverage-total.txt
+          key: go-cad-base-cov-${{ github.sha }}
+
+      # ── PR: stash current total, restore base, generate diff comment ─────
+      - name: Stash PR branch coverage before base restore
+        if: github.event_name == 'pull_request'
+        run: cp "$RUNNER_TEMP/coverage-total.txt" "$RUNNER_TEMP/pr-coverage.txt"
+
+      - name: Restore base branch coverage from cache
+        if: github.event_name == 'pull_request'
+        id: restore-base-cov
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/coverage-total.txt
+          key: go-cad-base-cov-${{ github.event.pull_request.base.sha }}
+          restore-keys: go-cad-base-cov-
+
       - name: Generate coverage summary
         if: github.event_name == 'pull_request'
+        env:
+          BASE_CACHE_KEY: ${{ steps.restore-base-cov.outputs.cache-matched-key }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}')
+          PR_TOTAL=$(cat "$RUNNER_TEMP/pr-coverage.txt")
+
+          if [ -n "$BASE_CACHE_KEY" ]; then
+            BASE_TOTAL=$(cat "$RUNNER_TEMP/coverage-total.txt")
+            PR_NUM="${PR_TOTAL%\%}"
+            BASE_NUM="${BASE_TOTAL%\%}"
+            DIFF=$(awk "BEGIN { d=$PR_NUM-$BASE_NUM; printf (d>=0 ? \"+%.1f\" : \"%.1f\"), d }")
+            DIFF_LINE="> Change vs \`${BASE_REF}\`: **\`${DIFF}%\`** (base: \`${BASE_TOTAL}\`)"
+          else
+            DIFF_LINE="> _No base coverage cached yet — will appear after CI runs on \`${BASE_REF}\`._"
+          fi
+
           {
             echo "## Test Coverage 📊"
             echo ""
-            echo "**Total: \`${TOTAL}\`**"
+            echo "**Total: \`${PR_TOTAL}\`**"
+            echo ""
+            echo "$DIFF_LINE"
             echo ""
             echo "<details>"
             echo "<summary>Per-package breakdown</summary>"
@@ -82,6 +128,7 @@ jobs:
             echo ""
             echo "</details>"
           } > /tmp/coverage-comment.md
+
       - name: Post coverage comment on PR
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
