@@ -1,3 +1,3 @@
 module github.com/tomott12345/go-cad
 
-go 1.22
+go 1.25
