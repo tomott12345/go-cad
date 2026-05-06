@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/tomott12345/go-cad/actions/workflows/ci.yml/badge.svg)](https://github.com/tomott12345/go-cad/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/tomott12345/go-cad/branch/main/graph/badge.svg)](https://codecov.io/gh/tomott12345/go-cad)
-[![Go Version](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/dl/)
+[![Release](https://img.shields.io/github/v/release/tomott12345/go-cad)](https://github.com/tomott12345/go-cad/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/demo-GitHub%20Pages-orange.svg)](https://tomott12345.github.io/go-cad)
 
@@ -68,7 +69,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams.
 
 ### Prerequisites
 
-- Go 1.22 or later (`go version`)
+- Go 1.25 or later (`go version`)
 - No other dependencies required
 
 ### Build and run
